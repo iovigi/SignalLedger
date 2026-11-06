@@ -1,15 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace SignalLedger.Api.IntegrationTests;
 
-public sealed class RoutingTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class RoutingTests : IClassFixture<SignalLedgerApiFactory>
 {
     private readonly HttpClient client;
 
-    public RoutingTests(WebApplicationFactory<Program> factory)
+    public RoutingTests(SignalLedgerApiFactory factory)
     {
         client = factory.CreateClient();
     }
