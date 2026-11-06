@@ -295,11 +295,11 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 
 ### M2 — Deterministic backtest core
 
-- [ ] **M2.1** Implement typed immutable price series, indicators (SMA/EMA) and warm-up rules. **Done when:** golden-vector tests pass for N=1, N>history, missing dates and equality.
-- [ ] **M2.2** Implement signal-to-next-open scheduler, desired-state transitions and explicit initial-state policy. **Done when:** tests prove no same-close execution, duplicate orders or forward data access.
-- [ ] **M2.3** Implement long-only cash/units portfolio ledger, per-side fees, slippage, mark-to-market and end-of-window semantics. **Done when:** hand-calculated tiny datasets match ledger exactly and cash never becomes negative.
-- [ ] **M2.4** Implement Buy & Hold, SMA and EMA strategies behind interface. **Done when:** benchmark and strategy use consistent first execution day and model assumptions.
-- [ ] **M2.5** Compute CAGR, drawdown, costs, trades, invested time, annual returns and Sharpe with documented conventions. **Done when:** golden-vector metrics and edge-case tests pass.
+- [x] **M2.1** Implement typed immutable price series, indicators (SMA/EMA) and warm-up rules. **Done when:** golden-vector tests pass for N=1, N>history, missing dates and equality.
+- [x] **M2.2** Implement signal-to-next-open scheduler, desired-state transitions and explicit initial-state policy. **Done when:** tests prove no same-close execution, duplicate orders or forward data access.
+- [x] **M2.3** Implement long-only cash/units portfolio ledger, per-side fees, slippage, mark-to-market and end-of-window semantics. **Done when:** hand-calculated tiny datasets match ledger exactly and cash never becomes negative.
+- [x] **M2.4** Implement Buy & Hold, SMA and EMA strategies behind interface. **Done when:** benchmark and strategy use consistent first execution day and model assumptions.
+- [x] **M2.5** Compute CAGR, drawdown, costs, trades, invested time, annual returns and Sharpe with documented conventions. **Done when:** golden-vector metrics and edge-case tests pass.
 - [ ] **M2.6** Expose validated backtest API, data fingerprints, deterministic results and history storage. **Done when:** same data+params yield identical outcomes after restart.
 - [ ] **M2.7** Add optional historical cash/T-bill adapter with correct rate semantics and point-in-time availability. **Done when:** interest accrual and missing-rate scenarios validated; otherwise keep UI mode disabled and default 0%.
 
@@ -361,6 +361,7 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M1.3 | Wired migrated SQLite storage into the API, seeded the supported instrument catalog, added source-specific coverage/quality reporting, tradability warnings, US equity-session calendar (including exceptional closures), and Data Manager endpoints | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 6/6, Infrastructure 11/11; `git diff --check` passed | M1.2 commit `ad9cf37`; M1.3 not yet committed |
 | 2026-11-07 | M1.4 | Added disabled-by-default Yahoo Chart adapter with dual authorization gate, allowlist/range/timeout bounds, retry/backoff, cancellation, fixture parsing, provider errors, incremental transactional sync and audit; no live requests in tests | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 7/7, Infrastructure 17/17; contract tests cover disabled/unauthorized modes, fixture parsing, retry bounds, allowlist/range and incremental sync | M1.3 commit `7363d4a`; M1.4 not yet committed |
 | 2026-11-07 | M1.5 | Added `docs/DATA_SOURCES.md` covering CSV-first use, supported symbols, index/ETF tradability, OHLC vs Bid/Ask, Yahoo restrictions/gate, redistribution and adjusted-price constraints | Documentation reviewed against provider/runtime defaults; `git diff --check` passed | Included with M1.4 working tree |
+| 2026-11-07 | M2.1–M2.5 | Added immutable ordered price series, SMA/EMA with explicit seeding and warm-up, next-open signal scheduler, long-only fee/slippage ledger, Buy & Hold/SMA/EMA strategy interface, common-window engine, and documented performance analytics | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 7/7, Infrastructure 17/17; golden tests cover N=1/N>history/gaps/equality, no-look-ahead/duplicates/last signal, hand-calculated costs, no negative cash, end liquidation, shared timestamps and metrics edge cases; `git diff --check` passed | M1 commit `0b6df3a`; M2 core not yet committed |
 
 ## 15. References
 
@@ -373,4 +374,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Implement `M2.1` immutable price series, SMA/EMA and warm-up semantics. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** Implement `M2.6` validated deterministic backtest API, fingerprinting and restart-stable history. `M0.3` awaits a green GitHub Actions run on main.
