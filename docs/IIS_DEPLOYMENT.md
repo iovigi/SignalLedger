@@ -62,6 +62,14 @@ Expected results:
 - Confirm `C:\ProgramData\SignalLedger\data\signalledger.db` persists when a new timestamped release is deployed.
 - Confirm the pool identity can modify the data directory but cannot modify release files.
 
+The repeatable acceptance command is:
+
+```powershell
+.\scripts\test-iis.ps1 -BaseUrl https://backtests.example.com -SiteName SignalLedger -AppPoolName SignalLedger
+```
+
+For a local certificate that is not trusted yet, add `-SkipCertificateCheck`. The script creates a deterministic synthetic backtest, recycles the pool, and requires the stored fingerprint and final equity to remain identical afterward.
+
 IIS idle timeout may pause in-process jobs. Keep refresh and experiments user-initiated; set a suitable pool idle timeout or `0` for a dedicated deployment. Pending experiment jobs are persisted and recovered after process restart.
 
 ## Backup, rollback, and migration
