@@ -15,6 +15,7 @@ public sealed record ExecutionRequest(decimal CommissionPercentPerSide = 0, deci
 public sealed record BacktestRequest(string Symbol, string Source, DateOnly StartDate, DateOnly EndDate, decimal InitialCapital, StrategyRequest Strategy, ExecutionRequest Execution);
 public sealed record BacktestSeriesPoint(DateOnly Date, decimal Close, double? Indicator, decimal StrategyEquity, decimal BenchmarkEquity);
 public sealed record BacktestResponse(Guid Id, string EngineVersion, string Symbol, string Source, string DataFingerprint, string StrategyName, DateOnly StartDate, DateOnly EndDate, PerformanceSummary Strategy, PerformanceSummary Benchmark, double OutperformanceVsBenchmark, IReadOnlyList<BacktestSeriesPoint> Series, IReadOnlyList<LedgerTrade> Trades, IReadOnlyList<string> Warnings);
+public sealed record TradePage(int Page, int PageSize, int Total, IReadOnlyList<LedgerTrade> Items);
 
 public sealed class BacktestService(SignalLedgerDbContext dbContext, TimeProvider timeProvider)
 {
@@ -69,6 +70,16 @@ public sealed class BacktestService(SignalLedgerDbContext dbContext, TimeProvide
         return new(run.Id, run.EngineVersion, run.Symbol, run.Source, run.DataFingerprint, run.StrategyName, run.From, run.To, summary.Strategy, summary.Benchmark, summary.Strategy.TotalReturn - summary.Benchmark.TotalReturn, combined, trades, summary.Warnings);
     }
 
+    public async Task<TradePage?> GetTradesAsync(Guid id, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        if (page < 1 || pageSize is < 1 or > 200) throw new BacktestValidationException("Page must be positive and pageSize must be between 1 and 200.");
+        if (!await dbContext.BacktestRuns.AnyAsync(x => x.Id == id, cancellationToken)) return null;
+        var query = dbContext.Trades.AsNoTracking().Where(x => x.BacktestRunId == id).OrderBy(x => x.Sequence);
+        var total = await query.CountAsync(cancellationToken);
+        var stored = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return new(page, pageSize, total, stored.Select(ToLedgerTrade).ToArray());
+    }
+
     private static void Validate(BacktestRequest request)
     {
         if (!Symbols.Contains(request.Symbol.Trim().ToUpperInvariant())) throw new BacktestValidationException("Symbol is not supported.");
@@ -98,6 +109,7 @@ public sealed class BacktestService(SignalLedgerDbContext dbContext, TimeProvide
 
     private static StoredEquityPoint ToStored(Guid runId, string series, EquityPoint point, double? indicator) => new() { BacktestRunId = runId, Series = series, SessionDate = point.Date, Equity = point.Equity, Cash = point.Cash, Units = point.Units, Close = point.ClosingPrice, Indicator = indicator };
     private static StoredTrade ToStored(Guid runId, int sequence, LedgerTrade trade) => new() { BacktestRunId = runId, Sequence = sequence, SignalDate = trade.SignalDate, ExecutionDate = trade.ExecutionDate, Side = trade.Side.ToString(), ReferencePrice = trade.ReferencePrice, EffectivePrice = trade.EffectivePrice, Units = trade.Units, Notional = trade.Notional, Commission = trade.Commission, CashAfter = trade.CashAfter, EquityAfter = trade.EquityAfter, Reason = trade.Reason };
+    private static LedgerTrade ToLedgerTrade(StoredTrade x) => new(x.SignalDate, x.ExecutionDate, Enum.Parse<TradeSide>(x.Side), x.ReferencePrice, Math.Abs(x.EffectivePrice - x.ReferencePrice), x.EffectivePrice, x.Units, x.Notional, x.Commission, x.CashAfter, x.EquityAfter, x.Reason);
     private sealed record StoredSummary(PerformanceSummary Strategy, PerformanceSummary Benchmark, IReadOnlyList<string> Warnings);
 }
 

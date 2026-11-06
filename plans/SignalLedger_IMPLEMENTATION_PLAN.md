@@ -301,15 +301,15 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 - [x] **M2.4** Implement Buy & Hold, SMA and EMA strategies behind interface. **Done when:** benchmark and strategy use consistent first execution day and model assumptions.
 - [x] **M2.5** Compute CAGR, drawdown, costs, trades, invested time, annual returns and Sharpe with documented conventions. **Done when:** golden-vector metrics and edge-case tests pass.
 - [x] **M2.6** Expose validated backtest API, data fingerprints, deterministic results and history storage. **Done when:** same data+params yield identical outcomes after restart.
-- [ ] **M2.7** Add optional historical cash/T-bill adapter with correct rate semantics and point-in-time availability. **Done when:** interest accrual and missing-rate scenarios validated; otherwise keep UI mode disabled and default 0%.
+- [x] **M2.7** Add optional historical cash/T-bill adapter with correct rate semantics and point-in-time availability. **Done when:** interest accrual and missing-rate scenarios validated; otherwise keep UI mode disabled and default 0%.
 
 ### M3 — Web dashboard
 
-- [ ] **M3.1** Design responsive dashboard with symbol, dates, capital, strategy and execution cost form. **Done when:** accessible keyboard controls and input validation work on desktop/mobile.
-- [ ] **M3.2** Render comparison metrics, normalized equity/drawdown and prices with SMA signals. **Done when:** chart points and table values agree with API fixtures.
-- [ ] **M3.3** Implement pageable trade journal and detailed assumptions/warnings. **Done when:** each trade shows signal/fill dates, costs and auditable balance.
-- [ ] **M3.4** Implement Data Manager with file upload, cache status, refresh and import-error UI. **Done when:** user can complete first run from a synthetic CSV fully in browser.
-- [ ] **M3.5** Add empty/loading/error/accessibility polish, About/Methodology page and screenshots. **Done when:** E2E happy path and representative failure path pass.
+- [x] **M3.1** Design responsive dashboard with symbol, dates, capital, strategy and execution cost form. **Done when:** accessible keyboard controls and input validation work on desktop/mobile.
+- [x] **M3.2** Render comparison metrics, normalized equity/drawdown and prices with SMA signals. **Done when:** chart points and table values agree with API fixtures.
+- [x] **M3.3** Implement pageable trade journal and detailed assumptions/warnings. **Done when:** each trade shows signal/fill dates, costs and auditable balance.
+- [x] **M3.4** Implement Data Manager with file upload, cache status, refresh and import-error UI. **Done when:** user can complete first run from a synthetic CSV fully in browser.
+- [x] **M3.5** Add empty/loading/error/accessibility polish, About/Methodology page and screenshots. **Done when:** E2E happy path and representative failure path pass.
 
 ### M4 — Strategy Explorer
 
@@ -363,6 +363,8 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M1.5 | Added `docs/DATA_SOURCES.md` covering CSV-first use, supported symbols, index/ETF tradability, OHLC vs Bid/Ask, Yahoo restrictions/gate, redistribution and adjusted-price constraints | Documentation reviewed against provider/runtime defaults; `git diff --check` passed | Included with M1.4 working tree |
 | 2026-11-07 | M2.1–M2.5 | Added immutable ordered price series, SMA/EMA with explicit seeding and warm-up, next-open signal scheduler, long-only fee/slippage ledger, Buy & Hold/SMA/EMA strategy interface, common-window engine, and documented performance analytics | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 7/7, Infrastructure 17/17; golden tests cover N=1/N>history/gaps/equality, no-look-ahead/duplicates/last signal, hand-calculated costs, no negative cash, end liquidation, shared timestamps and metrics edge cases; `git diff --check` passed | M1 commit `0b6df3a`; M2 core not yet committed |
 | 2026-11-07 | M2.6 | Added bounded request validation, deterministic SHA-256 data fingerprints, strategy/benchmark API, normalized stored equity/trades, generated detail migrations, and restart-stable result retrieval | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 9/9, Infrastructure 17/17; integration test creates a run, disposes the application, starts a new application on the same DB, and verifies byte-equivalent serialized results; `git diff --check` passed | M2 core commit `9debf60`; M2.6 not yet committed |
+| 2026-11-07 | M2.7 | Kept historical cash yield explicitly unavailable: API rejects any mode other than `None`, dashboard control is disabled, and every run displays 0% cash yield until validated point-in-time data exists | Covered by request-validation integration test and browser workflow; no unvalidated rate adapter or forward-looking fallback added | M2.6 commit `2b48ac0` |
+| 2026-11-07 | M3.1–M3.5 | Added responsive Tailwind/Vite dashboard, validated cost/strategy form, Recharts equity/drawdown/price/annual views, comparison metrics, assumptions, paged trade API/journal, strict browser CSV import, cache coverage, themes, empty/loading/error states, methodology page and generated screenshot | Backend `dotnet test` passed: Domain 27/27, API 11/11, Infrastructure 17/17; `npm run lint` and `npm run build` passed; Playwright 3/3 passed for full CSV→backtest flow, API-value/UI agreement, serious/critical axe scan, representative API failure and 390px mobile overflow; screenshot `docs/SCREENSHOTS/dashboard.png` generated | M3 working tree not yet committed |
 
 ## 15. References
 
@@ -375,4 +377,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Keep `M2.7` historical cash yield disabled at 0% until a validated point-in-time dataset exists; implement the `M3.1` accessible dashboard against the verified API. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** Implement `M4.1` bounded strategy-explorer jobs and verify every grid cell against independent backtests. `M0.3` awaits a green GitHub Actions run on main.

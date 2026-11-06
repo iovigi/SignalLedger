@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using SignalLedger.Api.Backtests;
 using SignalLedger.Domain.MarketData;
@@ -10,6 +11,7 @@ namespace SignalLedger.Api.IntegrationTests;
 
 public sealed class BacktestApiTests
 {
+    private static readonly JsonSerializerOptions ApiJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
     [Fact]
     public async Task SameRunReloadedAfterApplicationRestart_IsDeterministic()
     {
@@ -29,14 +31,18 @@ public sealed class BacktestApiTests
             using var client = first.CreateClient();
             using var response = await client.PostAsJsonAsync("/api/backtests", Request());
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-            created = (await response.Content.ReadFromJsonAsync<BacktestResponse>())!;
+            created = (await response.Content.ReadFromJsonAsync<BacktestResponse>(ApiJson))!;
             id = created.Id;
+            var tradePage = await client.GetFromJsonAsync<TradePage>($"/api/backtests/{id}/trades?page=1&pageSize=1", ApiJson);
+            Assert.NotNull(tradePage);
+            Assert.Equal(created.Trades.Count, tradePage.Total);
+            Assert.True(tradePage.Items.Count <= 1);
         }
 
         await using (var second = SignalLedgerApiFactory.ForPersistentDirectory(directory, deleteOnDispose: true))
         {
             using var client = second.CreateClient();
-            var reloaded = await client.GetFromJsonAsync<BacktestResponse>($"/api/backtests/{id}");
+            var reloaded = await client.GetFromJsonAsync<BacktestResponse>($"/api/backtests/{id}", ApiJson);
             Assert.NotNull(reloaded);
             Assert.Equal(created.DataFingerprint, reloaded.DataFingerprint);
             Assert.Equal(JsonSerializer.Serialize(created), JsonSerializer.Serialize(reloaded));

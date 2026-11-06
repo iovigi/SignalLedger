@@ -1,0 +1,14 @@
+export type AnnualReturn = { year: number; return: number }
+export type PerformanceSummary = {
+  finalEquity: number; totalReturn: number; cagr: number | null; maxDrawdown: number
+  annualizedVolatility: number | null; sharpeRatio: number | null; transactions: number; roundTrips: number
+  totalCommission: number; estimatedSlippageCost: number; tradingDays: number; daysInvested: number
+  percentTimeInvested: number; annualReturns: AnnualReturn[]; worstCalendarYear: AnnualReturn | null; warnings: string[]
+}
+export type SeriesPoint = { date: string; close: number; indicator: number | null; strategyEquity: number; benchmarkEquity: number }
+export type Trade = { signalDate: string; executionDate: string; side: 'Buy' | 'Sell'; referencePrice: number; slippagePerUnit: number; effectivePrice: number; units: number; notional: number; commission: number; cashAfter: number; equityAfter: number; reason: string }
+export type BacktestResponse = { id: string; engineVersion: string; symbol: string; source: string; dataFingerprint: string; strategyName: string; startDate: string; endDate: string; strategy: PerformanceSummary; benchmark: PerformanceSummary; outperformanceVsBenchmark: number; series: SeriesPoint[]; trades: Trade[]; warnings: string[] }
+export type SourceCoverage = { source: string; firstDate: string; lastDate: string; barCount: number; missingSessions: string[]; lastUpdatedUtc: string }
+export type Instrument = { symbol: string; displayName: string; assetClass: string; currency: string; priceSeriesMeaning: string; tradable: boolean; warnings: string[]; sources: SourceCoverage[] }
+export type ImportError = { row: number; field: string | null; message: string; value: string | null }
+export type ImportResult = { importRunId: string; added: number; updated: number; rejected: number; errors: ImportError[]; firstDate: string | null; lastDate: string | null }

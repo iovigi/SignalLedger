@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http.Features;
+using System.Text;
+using System.Text.Json.Serialization;
 using SignalLedger.Api.Backtests;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
@@ -10,6 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 5 * 1024 * 1024);
 builder.Services.AddOpenApi();
 var configuredDataDirectory = builder.Configuration["SignalLedger:DataDirectory"];
 var dataDirectory = string.IsNullOrWhiteSpace(configuredDataDirectory)
@@ -57,6 +62,27 @@ app.MapGet("/api/instruments/{symbol}/coverage", async (string symbol, MarketDat
     await coverage.GetAsync(symbol, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound())
     .WithName("InstrumentCoverage");
 
+app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, SignalLedgerDbContext db, CsvImportService importer, CancellationToken cancellationToken) =>
+{
+    if (file.Length == 0 || file.Length > 5 * 1024 * 1024)
+        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid CSV file", detail: "CSV file must be between 1 byte and 5 MB.");
+    if (!string.Equals(Path.GetExtension(Path.GetFileName(file.FileName)), ".csv", StringComparison.OrdinalIgnoreCase))
+        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid CSV file", detail: "Only .csv files are accepted.");
+    var normalized = symbol.Trim().ToUpperInvariant();
+    if (!await db.Instruments.AnyAsync(x => x.Symbol == normalized, cancellationToken))
+        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid symbol", detail: "Symbol is not in the configured allowlist.");
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: false);
+        return Results.Ok(await importer.ImportAsync(reader, new(normalized, "UserCsv", "USD"), cancellationToken));
+    }
+    catch (CsvImportException exception)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "CSV import failed", detail: exception.Message);
+    }
+}).DisableAntiforgery().WithName("ImportCsv");
+
 app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOnly to, MarketDataSyncService sync, CancellationToken cancellationToken) =>
 {
     try { return Results.Accepted(value: await sync.SyncAsync(symbol, from, to, cancellationToken)); }
@@ -79,6 +105,12 @@ app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService se
 
 app.MapGet("/api/backtests/{id:guid}", async (Guid id, BacktestService service, CancellationToken cancellationToken) =>
     await service.GetAsync(id, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound()).WithName("GetBacktest");
+
+app.MapGet("/api/backtests/{id:guid}/trades", async (Guid id, int page, int pageSize, BacktestService service, CancellationToken cancellationToken) =>
+{
+    try { return await service.GetTradesAsync(id, page, pageSize, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound(); }
+    catch (BacktestValidationException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid pagination", detail: exception.Message); }
+}).WithName("GetBacktestTrades");
 
 app.Map("/api/{**path}", () => Results.Problem(
     statusCode: StatusCodes.Status404NotFound,
