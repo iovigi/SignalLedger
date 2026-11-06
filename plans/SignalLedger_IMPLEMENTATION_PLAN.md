@@ -288,7 +288,7 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 ### M1 — Persistent data and import
 
 - [x] **M1.1** EF Core schema + migration for instruments, DailyBars, ImportRuns and BacktestRuns. **Done when:** DB persists across app restarts; duplicate key handling covered by tests.
-- [ ] **M1.2** Implement CSV import, validation, field mapping and import audit status. **Done when:** synthetic 30-year-like input imports; malformed prices/dates produce actionable errors, no silent fixes.
+- [x] **M1.2** Implement CSV import, validation, field mapping and import audit status. **Done when:** synthetic 30-year-like input imports; malformed prices/dates produce actionable errors, no silent fixes.
 - [ ] **M1.3** Implement data coverage/quality report and data-manager API. **Done when:** coverage dates, missing bars and source are accurately reported.
 - [ ] **M1.4** Implement optional Yahoo Chart adapter behind configuration and licensing gate, with bounded dates, retries with backoff, cancellation, incremental upsert and provider error handling. **Done when:** fixture/contract tests pass; any live fetch is enabled **only if authorized**, never required for build or CI.
 - [ ] **M1.5** Document provider restrictions, supported symbols, whether the series is tradable, and CSV-first fallback. **Done when:** reader cannot mistake OHLC for Bid/Ask or index values for executable prices.
@@ -357,6 +357,7 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M0.2 | Added README onboarding/commands, `.editorconfig`, contribution guide, code of conduct, and financial/data disclaimer; retained MIT license and repository `.gitignore` | Required-file check passed; documented `dotnet build SignalLedger.slnx -c Release --no-restore` passed with 0 warnings/errors; `git diff --check` passed | Working tree; not committed |
 | 2026-11-07 | M0.4 | Replaced template weather endpoint with JSON health contract, Problem Details API 404, static files and SPA deep-link fallback; added real in-process integration tests | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API integration 4/4 including health, deep link and API 404 | Working tree; not committed |
 | 2026-11-07 | M1.1 | Added typed instrument/bar/import/backtest models, EF Core SQLite context and generated `InitialCreate` migration; added Infrastructure test project with unique-key and restart persistence coverage | `dotnet tool run dotnet-ef migrations add InitialCreate ...` succeeded; `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 4/4, Infrastructure 3/3 | Foundation commit `c415cb1`; M1.1 working tree not yet committed |
+| 2026-11-07 | M1.2 | Added bounded CSV parser/import service with explicit header mapping, invariant date/number parsing, OHLC/volume validation, transactional idempotent upsert, per-row actionable errors and persisted import audit | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 4/4, Infrastructure 7/7; includes 7,560-row synthetic import, malformed rows, custom mapping and re-import tests; `git diff --check` passed | M1.1 commit `9c16386`; M1.2 not yet committed |
 
 ## 15. References
 
@@ -369,4 +370,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Implement `M1.2` strict CSV import and its audit/error behavior. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** Implement `M1.3` coverage/quality reporting and Data Manager API. `M0.3` awaits a green GitHub Actions run on main.

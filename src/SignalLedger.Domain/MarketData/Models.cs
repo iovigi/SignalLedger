@@ -18,17 +18,17 @@ public sealed class Instrument
 
 public sealed class DailyBar
 {
-    public long Id { get; init; }
-    public required string Symbol { get; init; }
-    public DateOnly SessionDate { get; init; }
-    public decimal Open { get; init; }
-    public decimal High { get; init; }
-    public decimal Low { get; init; }
-    public decimal Close { get; init; }
-    public decimal? AdjustedClose { get; init; }
-    public long? Volume { get; init; }
-    public required string Currency { get; init; }
-    public required string Source { get; init; }
-    public DateTimeOffset UpdatedAtUtc { get; init; }
-    public bool IsFinal { get; init; }
+    public long Id { get; set; }
+    public required string Symbol { get; set; }
+    public DateOnly SessionDate { get; set; }
+    public decimal Open { get; set; }
+    public decimal High { get; set; }
+    public decimal Low { get; set; }
+    public decimal Close { get; set; }
+    public decimal? AdjustedClose { get; set; }
+    public long? Volume { get; set; }
+    public required string Currency { get; set; }
+    public required string Source { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+    public bool IsFinal { get; set; }
 }
