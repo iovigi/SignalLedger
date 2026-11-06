@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/SignalLedger.Api.IntegrationTests/SignalLedger.Api.IntegrationTests.csproj" />
     <Project Path="tests/SignalLedger.Domain.Tests/SignalLedger.Domain.Tests.csproj" />
+    <Project Path="tests/SignalLedger.Infrastructure.Tests/SignalLedger.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>
