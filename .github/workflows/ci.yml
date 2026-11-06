@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/signal-ledger-web/package-lock.json
+      - name: Restore backend
+        run: dotnet restore SignalLedger.slnx
+      - name: Test backend
+        run: dotnet test SignalLedger.slnx -c Release --no-restore
+      - name: Install frontend
+        working-directory: src/signal-ledger-web
+        run: npm ci
+      - name: Lint frontend
+        working-directory: src/signal-ledger-web
+        run: npm run lint
+      - name: Build frontend
+        working-directory: src/signal-ledger-web
+        run: npm run build

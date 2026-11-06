@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SignalLedger.Api/SignalLedger.Api.csproj" />
+    <Project Path="src/SignalLedger.Domain/SignalLedger.Domain.csproj" />
+    <Project Path="src/SignalLedger.Infrastructure/SignalLedger.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SignalLedger.Api.IntegrationTests/SignalLedger.Api.IntegrationTests.csproj" />
+    <Project Path="tests/SignalLedger.Domain.Tests/SignalLedger.Domain.Tests.csproj" />
+  </Folder>
+</Solution>
