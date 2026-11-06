@@ -70,3 +70,31 @@ public sealed class StoredEquityPoint
     public decimal Close { get; set; }
     public double? Indicator { get; set; }
 }
+
+public sealed class ExperimentJob
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public required string Symbol { get; set; }
+    public required string Source { get; set; }
+    public required string RequestJson { get; set; }
+    public RunStatus Status { get; set; }
+    public int CompletedCells { get; set; }
+    public int TotalCells { get; set; }
+    public bool CancellationRequested { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset? CompletedAtUtc { get; set; }
+    public string? Error { get; set; }
+}
+
+public sealed class ExperimentCell
+{
+    public long Id { get; set; }
+    public Guid ExperimentJobId { get; set; }
+    public int Period { get; set; }
+    public decimal CommissionPercent { get; set; }
+    public double StrategyReturn { get; set; }
+    public double BenchmarkReturn { get; set; }
+    public double NetOutperformance { get; set; }
+    public string? WindowLabel { get; set; }
+    public bool IsHoldout { get; set; }
+}

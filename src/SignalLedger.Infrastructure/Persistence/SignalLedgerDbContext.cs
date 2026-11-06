@@ -12,6 +12,8 @@ public sealed class SignalLedgerDbContext(DbContextOptions<SignalLedgerDbContext
     public DbSet<BacktestRun> BacktestRuns => Set<BacktestRun>();
     public DbSet<StoredTrade> Trades => Set<StoredTrade>();
     public DbSet<StoredEquityPoint> EquityPoints => Set<StoredEquityPoint>();
+    public DbSet<ExperimentJob> ExperimentJobs => Set<ExperimentJob>();
+    public DbSet<ExperimentCell> ExperimentCells => Set<ExperimentCell>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,6 +41,15 @@ public sealed class SignalLedgerDbContext(DbContextOptions<SignalLedgerDbContext
         {
             e.HasKey(x => x.Id); e.HasIndex(x => new { x.BacktestRunId, x.Series, x.SessionDate }).IsUnique(); e.Property(x => x.Series).HasMaxLength(16);
             foreach (var name in new[] { nameof(StoredEquityPoint.Equity), nameof(StoredEquityPoint.Cash), nameof(StoredEquityPoint.Units), nameof(StoredEquityPoint.Close) }) e.Property(name).HasPrecision(28, 10);
+        });
+        modelBuilder.Entity<ExperimentJob>(e =>
+        {
+            e.HasKey(x => x.Id); e.Property(x => x.Symbol).HasMaxLength(16); e.Property(x => x.Source).HasMaxLength(40);
+        });
+        modelBuilder.Entity<ExperimentCell>(e =>
+        {
+            e.HasKey(x => x.Id); e.HasIndex(x => new { x.ExperimentJobId, x.Period, x.CommissionPercent, x.WindowLabel }).IsUnique();
+            e.Property(x => x.CommissionPercent).HasPrecision(8, 4); e.Property(x => x.WindowLabel).HasMaxLength(80);
         });
     }
 }

@@ -313,9 +313,9 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 
 ### M4 — Strategy Explorer
 
-- [ ] **M4.1** Implement bounded grid of SMA periods × per-side fees, job progress and cancel behavior. **Done when:** grid values equal corresponding independent backtests.
-- [ ] **M4.2** Implement rolling windows and holdout split for out-of-sample validation. **Done when:** no test-window values leak into parameter selection.
-- [ ] **M4.3** Add interactive heatmap, drilldowns, comparison exports and warnings about overfitting. **Done when:** arbitrary selected cell opens reproducible results.
+- [x] **M4.1** Implement bounded grid of SMA periods × per-side fees, job progress and cancel behavior. **Done when:** grid values equal corresponding independent backtests.
+- [x] **M4.2** Implement rolling windows and holdout split for out-of-sample validation. **Done when:** no test-window values leak into parameter selection.
+- [x] **M4.3** Add interactive heatmap, drilldowns, comparison exports and warnings about overfitting. **Done when:** arbitrary selected cell opens reproducible results.
 
 ### M5 — IIS and release quality
 
@@ -365,6 +365,7 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M2.6 | Added bounded request validation, deterministic SHA-256 data fingerprints, strategy/benchmark API, normalized stored equity/trades, generated detail migrations, and restart-stable result retrieval | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 9/9, Infrastructure 17/17; integration test creates a run, disposes the application, starts a new application on the same DB, and verifies byte-equivalent serialized results; `git diff --check` passed | M2 core commit `9debf60`; M2.6 not yet committed |
 | 2026-11-07 | M2.7 | Kept historical cash yield explicitly unavailable: API rejects any mode other than `None`, dashboard control is disabled, and every run displays 0% cash yield until validated point-in-time data exists | Covered by request-validation integration test and browser workflow; no unvalidated rate adapter or forward-looking fallback added | M2.6 commit `2b48ac0` |
 | 2026-11-07 | M3.1–M3.5 | Added responsive Tailwind/Vite dashboard, validated cost/strategy form, Recharts equity/drawdown/price/annual views, comparison metrics, assumptions, paged trade API/journal, strict browser CSV import, cache coverage, themes, empty/loading/error states, methodology page and generated screenshot | Backend `dotnet test` passed: Domain 27/27, API 11/11, Infrastructure 17/17; `npm run lint` and `npm run build` passed; Playwright 3/3 passed for full CSV→backtest flow, API-value/UI agreement, serious/critical axe scan, representative API failure and 390px mobile overflow; screenshot `docs/SCREENSHOTS/dashboard.png` generated | M3 working tree not yet committed |
+| 2026-11-07 | M4.1–M4.3 | Added persisted bounded experiment jobs, restart recovery, progress/cancellation, independent SMA×fee cells, rolling windows, training/holdout split with training-only selection, interactive heatmap, CSV export, overfitting warnings and cell-to-full-run drilldown | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 14/14, Infrastructure 17/17; tests prove cell equivalence to independent backtest, cancellation/bounds, rolling expansion and unchanged training selection after holdout mutation; `npm run lint` passed; Playwright 4/4 passed including heatmap export/drilldown; `git diff --check` passed | M3 commit `11e376a`; M4 not yet committed |
 
 ## 15. References
 
@@ -377,4 +378,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Implement `M4.1` bounded strategy-explorer jobs and verify every grid cell against independent backtests. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** Implement `M5.1` official one-folder IIS publish script and verify the published output contract. `M0.3` awaits a green GitHub Actions run on main.

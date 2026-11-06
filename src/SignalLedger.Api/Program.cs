@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.Features;
 using System.Text;
 using System.Text.Json.Serialization;
 using SignalLedger.Api.Backtests;
+using SignalLedger.Api.Experiments;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
 using SignalLedger.Infrastructure.Providers;
@@ -16,12 +17,15 @@ builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 5 * 1024 * 1024);
 builder.Services.AddOpenApi();
-var configuredDataDirectory = builder.Configuration["SignalLedger:DataDirectory"];
-var dataDirectory = string.IsNullOrWhiteSpace(configuredDataDirectory)
-    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SignalLedger", "data")
-    : configuredDataDirectory;
-Directory.CreateDirectory(dataDirectory);
-builder.Services.AddDbContext<SignalLedgerDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "signalledger.db")};Default Timeout=30"));
+builder.Services.AddDbContext<SignalLedgerDbContext>((services, options) =>
+{
+    var configuredDataDirectory = services.GetRequiredService<IConfiguration>()["SignalLedger:DataDirectory"];
+    var dataDirectory = string.IsNullOrWhiteSpace(configuredDataDirectory)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SignalLedger", "data")
+        : Path.GetFullPath(configuredDataDirectory);
+    Directory.CreateDirectory(dataDirectory);
+    options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "signalledger.db")};Default Timeout=30");
+});
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CsvImportService>();
 builder.Services.AddScoped<MarketDataCoverageService>();
@@ -30,6 +34,9 @@ builder.Services.AddSingleton(yahooOptions);
 builder.Services.AddHttpClient<IMarketDataProvider, YahooChartAdapter>();
 builder.Services.AddScoped<MarketDataSyncService>();
 builder.Services.AddScoped<BacktestService>();
+builder.Services.AddSingleton<ExperimentQueue>();
+builder.Services.AddScoped<ExperimentService>();
+builder.Services.AddHostedService<ExperimentWorker>();
 
 var app = builder.Build();
 
@@ -111,6 +118,18 @@ app.MapGet("/api/backtests/{id:guid}/trades", async (Guid id, int page, int page
     try { return await service.GetTradesAsync(id, page, pageSize, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound(); }
     catch (BacktestValidationException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid pagination", detail: exception.Message); }
 }).WithName("GetBacktestTrades");
+
+app.MapPost("/api/experiments", async (ExperimentRequest request, ExperimentService service, CancellationToken cancellationToken) =>
+{
+    try { var result = await service.CreateAsync(request, cancellationToken); return Results.Accepted($"/api/experiments/{result.Id}", result); }
+    catch (BacktestValidationException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid experiment request", detail: exception.Message); }
+}).WithName("CreateExperiment");
+
+app.MapGet("/api/experiments/{id:guid}", async (Guid id, ExperimentService service, CancellationToken cancellationToken) =>
+    await service.GetAsync(id, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound()).WithName("GetExperiment");
+
+app.MapPost("/api/experiments/{id:guid}/cancel", async (Guid id, ExperimentService service, CancellationToken cancellationToken) =>
+    await service.CancelAsync(id, cancellationToken) ? Results.Accepted() : Results.NotFound()).WithName("CancelExperiment");
 
 app.Map("/api/{**path}", () => Results.Problem(
     statusCode: StatusCodes.Status404NotFound,

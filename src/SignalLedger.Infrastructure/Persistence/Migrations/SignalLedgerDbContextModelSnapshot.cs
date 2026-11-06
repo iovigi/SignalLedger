@@ -183,6 +183,92 @@ namespace SignalLedger.Infrastructure.Persistence.Migrations
                     b.ToTable("BacktestRuns");
                 });
 
+            modelBuilder.Entity("SignalLedger.Domain.Runs.ExperimentCell", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("BenchmarkReturn")
+                        .HasColumnType("REAL");
+
+                    b.Property<decimal>("CommissionPercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ExperimentJobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsHoldout")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("NetOutperformance")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("Period")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("StrategyReturn")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("WindowLabel")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExperimentJobId", "Period", "CommissionPercent", "WindowLabel")
+                        .IsUnique();
+
+                    b.ToTable("ExperimentCells");
+                });
+
+            modelBuilder.Entity("SignalLedger.Domain.Runs.ExperimentJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("CancellationRequested")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CompletedCells")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalCells")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExperimentJobs");
+                });
+
             modelBuilder.Entity("SignalLedger.Domain.Runs.ImportRun", b =>
                 {
                     b.Property<Guid>("Id")

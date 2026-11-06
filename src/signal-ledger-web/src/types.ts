@@ -12,3 +12,5 @@ export type SourceCoverage = { source: string; firstDate: string; lastDate: stri
 export type Instrument = { symbol: string; displayName: string; assetClass: string; currency: string; priceSeriesMeaning: string; tradable: boolean; warnings: string[]; sources: SourceCoverage[] }
 export type ImportError = { row: number; field: string | null; message: string; value: string | null }
 export type ImportResult = { importRunId: string; added: number; updated: number; rejected: number; errors: ImportError[]; firstDate: string | null; lastDate: string | null }
+export type ExperimentCell = { period: number; commissionPercent: number; strategyReturn: number; benchmarkReturn: number; netOutperformance: number; windowLabel: string | null; isHoldout: boolean }
+export type ExperimentResponse = { id: string; symbol: string; source: string; status: 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled'; completedCells: number; totalCells: number; cancellationRequested: boolean; error: string | null; selectedTrainingPeriod: number | null; cells: ExperimentCell[] }

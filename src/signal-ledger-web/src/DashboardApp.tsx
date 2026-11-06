@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { getInstruments, importCsv, runBacktest } from './api'
-import type { BacktestResponse, ImportResult, Instrument, SeriesPoint } from './types'
+import { cancelExperiment, createExperiment, getExperiment, getInstruments, importCsv, runBacktest } from './api'
+import type { BacktestResponse, ExperimentResponse, ImportResult, Instrument, SeriesPoint } from './types'
 import './dashboard.css'
 
-type Page = 'dashboard' | 'data' | 'runs' | 'methodology'
+type Page = 'dashboard' | 'data' | 'explorer' | 'runs' | 'methodology'
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 const percent = (value: number | null) => value == null ? '—' : `${(value * 100).toFixed(2)}%`
 const compact = (value: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value)
@@ -33,13 +33,14 @@ function DashboardApp() {
     setRunning(true); setRunError('')
     try { setResult(await runBacktest(payload)) } catch (error) { setRunError((error as Error).message) } finally { setRunning(false) }
   }
+  async function openExplorerRun(payload: unknown) { await submit(payload); setPage('dashboard') }
 
   return <div className={dark ? 'app theme-dark' : 'app theme-light'}>
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="app-header">
       <button className="brand-button" onClick={() => setPage('dashboard')}><span className="brand-mark">SL</span><span><b>SignalLedger</b><small>Market backtesting lab</small></span></button>
       <nav aria-label="Primary navigation">
-        {([['dashboard', 'Dashboard'], ['data', 'Data Manager'], ['runs', 'Runs & Journal'], ['methodology', 'Methodology']] as [Page, string][]).map(([key, label]) => <button key={key} className={page === key ? 'nav-active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}
+        {([['dashboard', 'Dashboard'], ['data', 'Data Manager'], ['explorer', 'Strategy Explorer'], ['runs', 'Runs & Journal'], ['methodology', 'Methodology']] as [Page, string][]).map(([key, label]) => <button key={key} className={page === key ? 'nav-active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}
       </nav>
       <button className="icon-button" onClick={() => setDark(value => !value)} aria-label={`Use ${dark ? 'light' : 'dark'} theme`}>{dark ? '☀' : '☾'}</button>
     </header>
@@ -47,6 +48,7 @@ function DashboardApp() {
       {catalogError && <Status kind="error">Could not load data catalog: {catalogError}</Status>}
       {page === 'dashboard' && <Dashboard instruments={instruments} catalogLoading={loadingCatalog} result={result} running={running} error={runError} onRun={submit} onOpenData={() => setPage('data')} />}
       {page === 'data' && <DataManager instruments={instruments} loading={loadingCatalog} onRefresh={refreshCatalog} />}
+      {page === 'explorer' && <StrategyExplorer instruments={instruments} onOpenRun={openExplorerRun} />}
       {page === 'runs' && <RunJournal result={result} />}
       {page === 'methodology' && <Methodology />}
     </main>
@@ -107,6 +109,52 @@ function Results({ result, drawdown, annual }: { result: BacktestResponse; drawd
     <AssumptionStrip result={result} />
     <TradeTable result={result} />
   </section>
+}
+
+function StrategyExplorer({ instruments, onOpenRun }: { instruments: Instrument[]; onOpenRun: (payload: unknown) => Promise<void> }) {
+  const [symbol, setSymbol] = useState('QQQ'); const [source, setSource] = useState('UserCsv')
+  const [from, setFrom] = useState('2020-01-01'); const [to, setTo] = useState(defaultEndDate); const [capital, setCapital] = useState(1000)
+  const [periods, setPeriods] = useState('5,10,20,30,50,100,150,200'); const [fees, setFees] = useState('0,0.05,0.1,0.2,0.5')
+  const [split, setSplit] = useState(false); const [trainingEnd, setTrainingEnd] = useState('2023-12-31'); const [holdoutStart, setHoldoutStart] = useState('2024-01-01')
+  const [rolling, setRolling] = useState(false); const [rollingStarts, setRollingStarts] = useState('2020-01-01,2022-01-01'); const [rollingYears, setRollingYears] = useState(3)
+  const [job, setJob] = useState<ExperimentResponse | null>(null); const [error, setError] = useState(''); const [view, setView] = useState('Full window'); const [opening, setOpening] = useState(false)
+  const selected = instruments.find(x => x.symbol === symbol)
+  const pollingJobId = job?.id; const pollingJobStatus = job?.status
+  useEffect(() => {
+    if (!pollingJobId || !pollingJobStatus || !['Pending', 'Running'].includes(pollingJobStatus)) return
+    let active = true; const poll = async () => { try { const next = await getExperiment(pollingJobId); if (active) setJob(next); if (active && ['Pending', 'Running'].includes(next.status)) window.setTimeout(poll, 250) } catch (e) { if (active) setError((e as Error).message) } }
+    const timer = window.setTimeout(poll, 250); return () => { active = false; window.clearTimeout(timer) }
+  }, [pollingJobId, pollingJobStatus])
+  const parsedPeriods = periods.split(',').map(x => Number(x.trim())).filter(Number.isFinite)
+  const parsedFees = fees.split(',').map(x => Number(x.trim())).filter(Number.isFinite)
+  const labels = useMemo(() => Array.from(new Set((job?.cells ?? []).map(x => x.windowLabel ?? 'Full window'))), [job])
+  const visible = (job?.cells ?? []).filter(x => (x.windowLabel ?? 'Full window') === view)
+  const rowPeriods = Array.from(new Set(visible.map(x => x.period))).sort((a, b) => a - b); const columns = Array.from(new Set(visible.map(x => x.commissionPercent))).sort((a, b) => a - b)
+  async function start(event: React.FormEvent) {
+    event.preventDefault(); setError(''); setJob(null); setView(split ? 'Training' : rolling ? `Rolling ${rollingStarts.split(',')[0]?.trim()}` : 'Full window')
+    try { setJob(await createExperiment({ symbol, source, startDate: from, endDate: to, initialCapital: capital, periods: parsedPeriods, commissionPercents: parsedFees, slippageBps: 0, rollingStartDates: rolling ? rollingStarts.split(',').map(x => x.trim()).filter(Boolean) : null, rollingWindowYears: rolling ? rollingYears : null, trainingEndDate: split ? trainingEnd : null, holdoutStartDate: split ? holdoutStart : null })) } catch (e) { setError((e as Error).message) }
+  }
+  async function drill(period: number, fee: number) { setOpening(true); await onOpenRun({ symbol, source, startDate: from, endDate: to, initialCapital: capital, strategy: { type: 'SMA', period }, execution: { commissionPercentPerSide: fee, slippageBpsPerSide: 0, liquidateAtEnd: false, cashYieldMode: 'None' } }); setOpening(false) }
+  function exportCsv() { if (!job) return; const csv = ['window,holdout,period,commissionPercent,strategyReturn,benchmarkReturn,netOutperformance', ...job.cells.map(x => `${x.windowLabel ?? 'Full window'},${x.isHoldout},${x.period},${x.commissionPercent},${x.strategyReturn},${x.benchmarkReturn},${x.netOutperformance}`)].join('\n'); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); const link = document.createElement('a'); link.href = url; link.download = `signalledger-experiment-${job.id}.csv`; link.click(); URL.revokeObjectURL(url) }
+  return <><section className="page-heading"><div><span className="eyebrow">ROBUSTNESS, NOT PARAMETER WORSHIP</span><h1>Strategy Explorer</h1><p>Compare bounded SMA grids, rolling windows, and a holdout period under identical assumptions.</p></div></section>
+    <section className="panel controls-panel"><h2>Experiment configuration</h2><form onSubmit={start}><div className="form-grid">
+      <Field label="Symbol"><select value={symbol} onChange={e => { const next = e.target.value; setSymbol(next); setSource(instruments.find(x => x.symbol === next)?.sources[0]?.source ?? 'UserCsv') }}>{instruments.map(x => <option key={x.symbol}>{x.symbol}</option>)}</select></Field>
+      <Field label="Source"><select value={source} onChange={e => setSource(e.target.value)}>{(selected?.sources ?? []).map(x => <option key={x.source}>{x.source}</option>)}{!selected?.sources.length && <option>UserCsv</option>}</select></Field>
+      <Field label="From"><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></Field><Field label="To"><input type="date" value={to} onChange={e => setTo(e.target.value)} /></Field><Field label="Capital"><input type="number" min="1" value={capital} onChange={e => setCapital(e.target.valueAsNumber)} /></Field>
+      <Field label="SMA periods (comma-separated)"><input value={periods} onChange={e => setPeriods(e.target.value)} /></Field><Field label="Fees % per side"><input value={fees} onChange={e => setFees(e.target.value)} /></Field>
+      <Field label="Holdout validation"><span className="check-row"><input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} /> Enable split</span></Field><Field label="Training ends"><input type="date" disabled={!split} value={trainingEnd} onChange={e => setTrainingEnd(e.target.value)} /></Field><Field label="Holdout starts"><input type="date" disabled={!split} value={holdoutStart} onChange={e => setHoldoutStart(e.target.value)} /></Field>
+      <Field label="Rolling windows"><span className="check-row"><input type="checkbox" checked={rolling} onChange={e => setRolling(e.target.checked)} /> Enable rolling starts</span></Field><Field label="Rolling starts"><input disabled={!rolling} value={rollingStarts} onChange={e => setRollingStarts(e.target.value)} /></Field><Field label="Window years"><input type="number" min="1" max="30" disabled={!rolling} value={rollingYears} onChange={e => setRollingYears(e.target.valueAsNumber)} /></Field>
+    </div><button className="primary-button" disabled={job?.status === 'Pending' || job?.status === 'Running'}>Run bounded grid</button></form></section>
+    {error && <Status kind="error">{error}</Status>}
+    {job && <section className="panel explorer-results"><div className="section-title"><div><h2>Experiment heatmap</h2><p className="muted">{job.completedCells} / {job.totalCells} cells · {job.status}</p></div><div className="button-row">{['Pending', 'Running'].includes(job.status) && <button className="secondary-button" onClick={() => void cancelExperiment(job.id)}>Cancel</button>}<button className="secondary-button" disabled={job.cells.length === 0} onClick={exportCsv}>Export CSV</button></div></div>
+      <progress value={job.completedCells} max={job.totalCells} aria-label="Experiment progress" />
+      {job.error && <Status kind="error">{job.error}</Status>}
+      {job.selectedTrainingPeriod != null && <Status kind="warning">Training-only selection: SMA {job.selectedTrainingPeriod}. Holdout values were not used to select this period.</Status>}
+      {labels.length > 1 && <Field label="Displayed window"><select value={labels.includes(view) ? view : labels[0]} onChange={e => setView(e.target.value)}>{labels.map(x => <option key={x}>{x}</option>)}</select></Field>}
+      {visible.length > 0 && <div className="heatmap-wrap"><table className="heatmap"><thead><tr><th>SMA ↓ / fee →</th>{columns.map(fee => <th key={fee}>{fee}%</th>)}</tr></thead><tbody>{rowPeriods.map(period => <tr key={period}><th>{period}</th>{columns.map(fee => { const cell = visible.find(x => x.period === period && x.commissionPercent === fee)!; const intensity = Math.min(65, 15 + Math.abs(cell.netOutperformance) * 300); return <td key={fee}><button disabled={opening} style={{ background: cell.netOutperformance >= 0 ? `color-mix(in srgb, var(--accent) ${intensity}%, var(--panel2))` : `color-mix(in srgb, var(--danger) ${intensity}%, var(--panel2))` }} onClick={() => void drill(period, fee)} aria-label={`Open SMA ${period}, fee ${fee} percent, outperformance ${percent(cell.netOutperformance)}`}>{cell.netOutperformance >= 0 ? '+' : ''}{percent(cell.netOutperformance)}</button></td> })}</tr>)}</tbody></table></div>}
+      <p className="inline-warning">⚠ Heatmap ranking is descriptive, not evidence of future performance. Prefer stable regions and inspect rolling/holdout results before drawing conclusions.</p>
+    </section>}
+  </>
 }
 
 function DataManager({ instruments, loading, onRefresh }: { instruments: Instrument[]; loading: boolean; onRefresh: () => Promise<void> }) {

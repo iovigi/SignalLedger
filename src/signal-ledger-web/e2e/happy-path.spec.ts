@@ -47,6 +47,22 @@ test.describe.serial('browser workflow', () => {
     await expect(page.getByRole('alert')).toContainText('Representative validation failure')
   })
 
+  test('runs an explorer grid, exports it, and drills into a reproducible cell', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Strategy Explorer' }).click()
+    await page.getByLabel('From', { exact: true }).fill('2020-01-01')
+    await page.getByLabel('To', { exact: true }).fill('2020-03-20')
+    await page.getByLabel('SMA periods (comma-separated)').fill('3,5')
+    await page.getByLabel('Fees % per side').fill('0,0.2')
+    await page.getByRole('button', { name: 'Run bounded grid' }).click()
+    await expect(page.getByText(/4 \/ 4 cells · Completed/)).toBeVisible()
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Export CSV' }).click()
+    expect((await downloadPromise).suggestedFilename()).toMatch(/signalledger-experiment/)
+    await page.getByRole('button', { name: /Open SMA 3, fee 0 percent/ }).click()
+    await expect(page.getByRole('heading', { name: 'Equity curves' })).toBeVisible()
+  })
+
   test('remains usable at a mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')
