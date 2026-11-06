@@ -39,3 +39,34 @@ public sealed class BacktestRun
     public string? SummaryJson { get; set; }
     public string? Error { get; set; }
 }
+
+public sealed class StoredTrade
+{
+    public long Id { get; set; }
+    public Guid BacktestRunId { get; set; }
+    public int Sequence { get; set; }
+    public DateOnly SignalDate { get; set; }
+    public DateOnly ExecutionDate { get; set; }
+    public required string Side { get; set; }
+    public decimal ReferencePrice { get; set; }
+    public decimal EffectivePrice { get; set; }
+    public decimal Units { get; set; }
+    public decimal Notional { get; set; }
+    public decimal Commission { get; set; }
+    public decimal CashAfter { get; set; }
+    public decimal EquityAfter { get; set; }
+    public required string Reason { get; set; }
+}
+
+public sealed class StoredEquityPoint
+{
+    public long Id { get; set; }
+    public Guid BacktestRunId { get; set; }
+    public required string Series { get; set; }
+    public DateOnly SessionDate { get; set; }
+    public decimal Equity { get; set; }
+    public decimal Cash { get; set; }
+    public decimal Units { get; set; }
+    public decimal Close { get; set; }
+    public double? Indicator { get; set; }
+}

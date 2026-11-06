@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SignalLedger.Api.Backtests;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
 using SignalLedger.Infrastructure.Providers;
@@ -23,6 +24,7 @@ var yahooOptions = builder.Configuration.GetSection("SignalLedger:Yahoo").Get<Ya
 builder.Services.AddSingleton(yahooOptions);
 builder.Services.AddHttpClient<IMarketDataProvider, YahooChartAdapter>();
 builder.Services.AddScoped<MarketDataSyncService>();
+builder.Services.AddScoped<BacktestService>();
 
 var app = builder.Build();
 
@@ -61,6 +63,22 @@ app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOn
     catch (ProviderDisabledException exception) { return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider disabled", detail: exception.Message); }
     catch (ArgumentException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid sync request", detail: exception.Message); }
 }).WithName("SyncMarketData");
+
+app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService service, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await service.RunAsync(request, cancellationToken);
+        return Results.Created($"/api/backtests/{result.Id}", result);
+    }
+    catch (BacktestValidationException exception)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid backtest request", detail: exception.Message);
+    }
+}).WithName("CreateBacktest");
+
+app.MapGet("/api/backtests/{id:guid}", async (Guid id, BacktestService service, CancellationToken cancellationToken) =>
+    await service.GetAsync(id, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound()).WithName("GetBacktest");
 
 app.Map("/api/{**path}", () => Results.Problem(
     statusCode: StatusCodes.Status404NotFound,

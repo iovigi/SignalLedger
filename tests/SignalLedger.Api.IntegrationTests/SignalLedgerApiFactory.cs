@@ -7,7 +7,17 @@ namespace SignalLedger.Api.IntegrationTests;
 
 public sealed class SignalLedgerApiFactory : WebApplicationFactory<Program>
 {
-    private readonly string dataDirectory = Path.Combine(Path.GetTempPath(), $"signalledger-api-{Guid.NewGuid():N}");
+    private readonly string dataDirectory;
+    private readonly bool deleteOnDispose;
+
+    public SignalLedgerApiFactory() : this(Path.Combine(Path.GetTempPath(), $"signalledger-api-{Guid.NewGuid():N}"), true) { }
+    private SignalLedgerApiFactory(string dataDirectory, bool deleteOnDispose)
+    {
+        this.dataDirectory = dataDirectory;
+        this.deleteOnDispose = deleteOnDispose;
+    }
+
+    public static SignalLedgerApiFactory ForPersistentDirectory(string dataDirectory, bool deleteOnDispose) => new(dataDirectory, deleteOnDispose);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -19,6 +29,6 @@ public sealed class SignalLedgerApiFactory : WebApplicationFactory<Program>
     {
         base.Dispose(disposing);
         SqliteConnection.ClearAllPools();
-        if (Directory.Exists(dataDirectory)) Directory.Delete(dataDirectory, recursive: true);
+        if (deleteOnDispose && Directory.Exists(dataDirectory)) Directory.Delete(dataDirectory, recursive: true);
     }
 }

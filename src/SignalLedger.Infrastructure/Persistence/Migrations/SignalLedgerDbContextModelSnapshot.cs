@@ -242,6 +242,114 @@ namespace SignalLedger.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ImportRuns");
                 });
+
+            modelBuilder.Entity("SignalLedger.Domain.Runs.StoredEquityPoint", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("BacktestRunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Cash")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Close")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Equity")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("Indicator")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Series")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Units")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BacktestRunId", "Series", "SessionDate")
+                        .IsUnique();
+
+                    b.ToTable("EquityPoints");
+                });
+
+            modelBuilder.Entity("SignalLedger.Domain.Runs.StoredTrade", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("BacktestRunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("CashAfter")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Commission")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EffectivePrice")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EquityAfter")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("ExecutionDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Notional")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ReferencePrice")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("SignalDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Units")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BacktestRunId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("Trades");
+                });
 #pragma warning restore 612, 618
         }
     }
