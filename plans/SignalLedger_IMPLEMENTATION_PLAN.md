@@ -290,8 +290,8 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 - [x] **M1.1** EF Core schema + migration for instruments, DailyBars, ImportRuns and BacktestRuns. **Done when:** DB persists across app restarts; duplicate key handling covered by tests.
 - [x] **M1.2** Implement CSV import, validation, field mapping and import audit status. **Done when:** synthetic 30-year-like input imports; malformed prices/dates produce actionable errors, no silent fixes.
 - [x] **M1.3** Implement data coverage/quality report and data-manager API. **Done when:** coverage dates, missing bars and source are accurately reported.
-- [ ] **M1.4** Implement optional Yahoo Chart adapter behind configuration and licensing gate, with bounded dates, retries with backoff, cancellation, incremental upsert and provider error handling. **Done when:** fixture/contract tests pass; any live fetch is enabled **only if authorized**, never required for build or CI.
-- [ ] **M1.5** Document provider restrictions, supported symbols, whether the series is tradable, and CSV-first fallback. **Done when:** reader cannot mistake OHLC for Bid/Ask or index values for executable prices.
+- [x] **M1.4** Implement optional Yahoo Chart adapter behind configuration and licensing gate, with bounded dates, retries with backoff, cancellation, incremental upsert and provider error handling. **Done when:** fixture/contract tests pass; any live fetch is enabled **only if authorized**, never required for build or CI.
+- [x] **M1.5** Document provider restrictions, supported symbols, whether the series is tradable, and CSV-first fallback. **Done when:** reader cannot mistake OHLC for Bid/Ask or index values for executable prices.
 
 ### M2 — Deterministic backtest core
 
@@ -359,6 +359,8 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M1.1 | Added typed instrument/bar/import/backtest models, EF Core SQLite context and generated `InitialCreate` migration; added Infrastructure test project with unique-key and restart persistence coverage | `dotnet tool run dotnet-ef migrations add InitialCreate ...` succeeded; `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 4/4, Infrastructure 3/3 | Foundation commit `c415cb1`; M1.1 working tree not yet committed |
 | 2026-11-07 | M1.2 | Added bounded CSV parser/import service with explicit header mapping, invariant date/number parsing, OHLC/volume validation, transactional idempotent upsert, per-row actionable errors and persisted import audit | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 4/4, Infrastructure 7/7; includes 7,560-row synthetic import, malformed rows, custom mapping and re-import tests; `git diff --check` passed | M1.1 commit `9c16386`; M1.2 not yet committed |
 | 2026-11-07 | M1.3 | Wired migrated SQLite storage into the API, seeded the supported instrument catalog, added source-specific coverage/quality reporting, tradability warnings, US equity-session calendar (including exceptional closures), and Data Manager endpoints | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 6/6, Infrastructure 11/11; `git diff --check` passed | M1.2 commit `ad9cf37`; M1.3 not yet committed |
+| 2026-11-07 | M1.4 | Added disabled-by-default Yahoo Chart adapter with dual authorization gate, allowlist/range/timeout bounds, retry/backoff, cancellation, fixture parsing, provider errors, incremental transactional sync and audit; no live requests in tests | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 1/1, API 7/7, Infrastructure 17/17; contract tests cover disabled/unauthorized modes, fixture parsing, retry bounds, allowlist/range and incremental sync | M1.3 commit `7363d4a`; M1.4 not yet committed |
+| 2026-11-07 | M1.5 | Added `docs/DATA_SOURCES.md` covering CSV-first use, supported symbols, index/ETF tradability, OHLC vs Bid/Ask, Yahoo restrictions/gate, redistribution and adjusted-price constraints | Documentation reviewed against provider/runtime defaults; `git diff --check` passed | Included with M1.4 working tree |
 
 ## 15. References
 
@@ -371,4 +373,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Implement optional, authorization-gated `M1.4` provider adapter using fixture/contract tests only. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** Implement `M2.1` immutable price series, SMA/EMA and warm-up semantics. `M0.3` awaits a green GitHub Actions run on main.

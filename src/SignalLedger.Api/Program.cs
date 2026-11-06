@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
+using SignalLedger.Infrastructure.Providers;
 using SignalLedger.Infrastructure.Reporting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +19,10 @@ builder.Services.AddDbContext<SignalLedgerDbContext>(options => options.UseSqlit
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CsvImportService>();
 builder.Services.AddScoped<MarketDataCoverageService>();
+var yahooOptions = builder.Configuration.GetSection("SignalLedger:Yahoo").Get<YahooProviderOptions>() ?? new();
+builder.Services.AddSingleton(yahooOptions);
+builder.Services.AddHttpClient<IMarketDataProvider, YahooChartAdapter>();
+builder.Services.AddScoped<MarketDataSyncService>();
 
 var app = builder.Build();
 
@@ -49,6 +54,13 @@ app.MapGet("/api/instruments", async (MarketDataCoverageService coverage, Cancel
 app.MapGet("/api/instruments/{symbol}/coverage", async (string symbol, MarketDataCoverageService coverage, CancellationToken cancellationToken) =>
     await coverage.GetAsync(symbol, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound())
     .WithName("InstrumentCoverage");
+
+app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOnly to, MarketDataSyncService sync, CancellationToken cancellationToken) =>
+{
+    try { return Results.Accepted(value: await sync.SyncAsync(symbol, from, to, cancellationToken)); }
+    catch (ProviderDisabledException exception) { return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider disabled", detail: exception.Message); }
+    catch (ArgumentException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid sync request", detail: exception.Message); }
+}).WithName("SyncMarketData");
 
 app.Map("/api/{**path}", () => Results.Problem(
     statusCode: StatusCodes.Status404NotFound,

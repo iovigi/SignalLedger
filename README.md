@@ -46,6 +46,8 @@ npm run build
 
 SignalLedger is CSV-first and must not bundle or redistribute downloaded Yahoo price history. Yahoo's chart endpoint is unofficial and its use may be restricted; the optional adapter will remain disabled unless a deployer confirms authorization. Index series such as `^NDX` are non-tradable theoretical proxies, and daily OHLC values are not Bid/Ask quotes. Repository fixtures must be synthetic or explicitly licensed.
 
+See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for supported symbols, CSV requirements, tradability labels, adjusted-price constraints, and the provider authorization gate.
+
 ## Production target
 
 The target is one ASP.NET Core site hosted on Windows/IIS, serving both `/api` and the compiled React SPA from the same origin. The SQLite data directory must remain outside the published site and `wwwroot`.

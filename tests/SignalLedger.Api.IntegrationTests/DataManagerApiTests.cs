@@ -29,4 +29,12 @@ public sealed class DataManagerApiTests : IClassFixture<SignalLedgerApiFactory>
         using var response = await client.GetAsync("/api/instruments/UNKNOWN/coverage");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    [Fact]
+    public async Task ProviderSync_IsForbiddenByDefault()
+    {
+        using var response = await client.PostAsync("/api/market-data/sync?symbol=QQQ&from=2020-01-01&to=2020-01-03", null);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
 }
