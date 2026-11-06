@@ -19,11 +19,12 @@ public sealed class DataManagerApiTests : IClassFixture<SignalLedgerApiFactory>
         var instruments = await response.Content.ReadFromJsonAsync<List<InstrumentCoverage>>(ApiJson);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(4, instruments?.Count);
+        Assert.Equal(5, instruments?.Count);
         var ndx = Assert.Single(instruments!, x => x.Symbol == "^NDX");
         Assert.False(ndx.Tradable);
         Assert.Contains(ndx.Warnings, x => x.Contains("Non-tradable", StringComparison.Ordinal));
         Assert.True(Assert.Single(instruments!, x => x.Symbol == "QQQ").Tradable);
+        Assert.Equal("Synthetic Demo Series", Assert.Single(instruments!, x => x.Symbol == "SYNTH").DisplayName);
     }
 
     [Fact]

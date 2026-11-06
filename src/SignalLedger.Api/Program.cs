@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using System.Text;
 using System.Text.Json.Serialization;
 using SignalLedger.Api.Backtests;
@@ -16,6 +18,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 5 * 1024 * 1024);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("writes", limiter =>
+    {
+        limiter.PermitLimit = 12;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+});
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<SignalLedgerDbContext>((services, options) =>
 {
@@ -42,7 +54,14 @@ var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    await DatabaseInitializer.InitializeAsync(scope.ServiceProvider.GetRequiredService<SignalLedgerDbContext>());
+    await DatabaseInitializer.InitializeAsync(
+        scope.ServiceProvider.GetRequiredService<SignalLedgerDbContext>(),
+        builder.Configuration.GetValue<bool>("SignalLedger:SeedSyntheticDemo"));
+}
+
+if (args.Contains("--migrate-only", StringComparer.OrdinalIgnoreCase))
+{
+    return;
 }
 
 // Configure the HTTP request pipeline.
@@ -52,6 +71,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
+app.UseRateLimiter();
 app.UseStaticFiles();
 
 app.MapGet("/api/health", (IHostEnvironment environment) => Results.Ok(new
@@ -69,8 +89,10 @@ app.MapGet("/api/instruments/{symbol}/coverage", async (string symbol, MarketDat
     await coverage.GetAsync(symbol, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound())
     .WithName("InstrumentCoverage");
 
-app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, SignalLedgerDbContext db, CsvImportService importer, CancellationToken cancellationToken) =>
+app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, IConfiguration configuration, SignalLedgerDbContext db, CsvImportService importer, CancellationToken cancellationToken) =>
 {
+    if (configuration.GetValue<bool>("SignalLedger:PublicDemoMode"))
+        return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Import disabled", detail: "CSV import is disabled in public demo mode. Run locally to import your own data.");
     if (file.Length == 0 || file.Length > 5 * 1024 * 1024)
         return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid CSV file", detail: "CSV file must be between 1 byte and 5 MB.");
     if (!string.Equals(Path.GetExtension(Path.GetFileName(file.FileName)), ".csv", StringComparison.OrdinalIgnoreCase))
@@ -88,14 +110,16 @@ app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, SignalLedg
     {
         return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "CSV import failed", detail: exception.Message);
     }
-}).DisableAntiforgery().WithName("ImportCsv");
+}).DisableAntiforgery().RequireRateLimiting("writes").WithName("ImportCsv");
 
-app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOnly to, MarketDataSyncService sync, CancellationToken cancellationToken) =>
+app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOnly to, IConfiguration configuration, MarketDataSyncService sync, CancellationToken cancellationToken) =>
 {
+    if (configuration.GetValue<bool>("SignalLedger:PublicDemoMode"))
+        return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider sync disabled", detail: "Provider sync is disabled in public demo mode.");
     try { return Results.Accepted(value: await sync.SyncAsync(symbol, from, to, cancellationToken)); }
     catch (ProviderDisabledException exception) { return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider disabled", detail: exception.Message); }
     catch (ArgumentException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid sync request", detail: exception.Message); }
-}).WithName("SyncMarketData");
+}).RequireRateLimiting("writes").WithName("SyncMarketData");
 
 app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService service, CancellationToken cancellationToken) =>
 {
@@ -108,7 +132,7 @@ app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService se
     {
         return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid backtest request", detail: exception.Message);
     }
-}).WithName("CreateBacktest");
+}).RequireRateLimiting("writes").WithName("CreateBacktest");
 
 app.MapGet("/api/backtests/{id:guid}", async (Guid id, BacktestService service, CancellationToken cancellationToken) =>
     await service.GetAsync(id, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound()).WithName("GetBacktest");
@@ -123,13 +147,13 @@ app.MapPost("/api/experiments", async (ExperimentRequest request, ExperimentServ
 {
     try { var result = await service.CreateAsync(request, cancellationToken); return Results.Accepted($"/api/experiments/{result.Id}", result); }
     catch (BacktestValidationException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid experiment request", detail: exception.Message); }
-}).WithName("CreateExperiment");
+}).RequireRateLimiting("writes").WithName("CreateExperiment");
 
 app.MapGet("/api/experiments/{id:guid}", async (Guid id, ExperimentService service, CancellationToken cancellationToken) =>
     await service.GetAsync(id, cancellationToken) is { } result ? Results.Ok(result) : Results.NotFound()).WithName("GetExperiment");
 
 app.MapPost("/api/experiments/{id:guid}/cancel", async (Guid id, ExperimentService service, CancellationToken cancellationToken) =>
-    await service.CancelAsync(id, cancellationToken) ? Results.Accepted() : Results.NotFound()).WithName("CancelExperiment");
+    await service.CancelAsync(id, cancellationToken) ? Results.Accepted() : Results.NotFound()).RequireRateLimiting("writes").WithName("CancelExperiment");
 
 app.Map("/api/{**path}", () => Results.Problem(
     statusCode: StatusCodes.Status404NotFound,
