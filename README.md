@@ -13,7 +13,7 @@
 - Deterministic Buy & Hold, SMA, and EMA simulations with next-open fills, commission, slippage, drawdown, CAGR, Sharpe, and trade journals.
 - Strategy Explorer with bounded parameter grids, rolling windows, training/holdout separation, cancellation, CSV export, and drilldowns.
 - Responsive React dashboard, browser accessibility/regression tests, and a synthetic public-demo dataset.
-- One-folder ASP.NET Core publish for IIS; no Node process or paid service is needed in production.
+- One-folder, self-hosted ASP.NET Core publish; no Node process or paid service is needed in production.
 
 ## Quick start
 
@@ -38,10 +38,10 @@ npm run lint
 npm run build
 npm run test:e2e
 cd ../..
-.\scripts\publish-iis.ps1
+.\scripts\publish.ps1
 ```
 
-The publish script produces and smoke-tests `artifacts/publish`, containing the API, generated `web.config`, and SPA assets. See [IIS deployment](docs/IIS_DEPLOYMENT.md) for HTTPS, ACL, backup, migration, rollback, and acceptance instructions.
+The publish script produces and smoke-tests `artifacts/publish`, containing the API and SPA assets, and checks health, the JSON `/api` 404 and SPA deep links. Run it with `dotnet SignalLedger.Api.dll`. See [deployment](docs/DEPLOYMENT.md) for configuration, HTTPS, backup, migration and rollback.
 
 ## Data and methodology
 

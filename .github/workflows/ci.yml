@@ -41,5 +41,5 @@ jobs:
       - name: Browser regression suite
         working-directory: src/signal-ledger-web
         run: npm run test:e2e
-      - name: Validate IIS publish contract
-        run: .\scripts\publish-iis.ps1 -SkipTestsForCi
+      - name: Validate publish contract
+        run: .\scripts\publish.ps1 -SkipTestsForCi

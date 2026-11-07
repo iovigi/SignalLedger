@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts\publish'),
+    [string]$OutputDirectory = '',
     [switch]$SkipTestsForCi
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repoRoot 'artifacts\publish' }
 $webRoot = Join-Path $repoRoot 'src\signal-ledger-web'
 $apiProject = Join-Path $repoRoot 'src\SignalLedger.Api\SignalLedger.Api.csproj'
 $solution = Join-Path $repoRoot 'SignalLedger.slnx'
@@ -55,7 +56,6 @@ New-Item -ItemType Directory -Path $publishedWwwroot -Force | Out-Null
 Copy-Item -Path (Join-Path $webRoot 'dist\*') -Destination $publishedWwwroot -Recurse -Force
 
 $requiredFiles = @(
-    (Join-Path $publishRoot 'web.config'),
     (Join-Path $publishRoot 'SignalLedger.Api.dll'),
     (Join-Path $publishedWwwroot 'index.html')
 )
@@ -64,9 +64,6 @@ foreach ($required in $requiredFiles) {
 }
 if (-not (Get-ChildItem -Path (Join-Path $publishedWwwroot 'assets') -File -ErrorAction SilentlyContinue | Where-Object Extension -In '.js', '.css')) {
     throw 'Published output contains no JavaScript/CSS assets.'
-}
-if ((Get-Content -LiteralPath (Join-Path $publishRoot 'web.config') -Raw) -notmatch 'AspNetCoreModuleV2') {
-    throw 'web.config is not configured for ASP.NET Core Module V2.'
 }
 
 Write-Host 'Starting published artifact for health verification...'
@@ -88,10 +85,26 @@ try {
         $errorLog = if (Test-Path $stderr) { Get-Content -LiteralPath $stderr -Raw } else { '' }
         throw "Published health endpoint did not return the expected contract. $errorLog"
     }
+
+    $missingStatus = 0; $missingType = ''
+    try { $null = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/does-not-exist" -UseBasicParsing -TimeoutSec 5 }
+    catch {
+        $missingStatus = [int]$_.Exception.Response.StatusCode
+        $missingType = [string]$_.Exception.Response.Content.Headers.ContentType
+        if (-not $missingType) { $missingType = [string]$_.Exception.Response.ContentType }
+    }
+    if ($missingStatus -ne 404 -or $missingType -notmatch 'json') {
+        throw "Unknown /api route must return a JSON 404; got status '$missingStatus' and content type '$missingType'."
+    }
+
+    $deepLink = Invoke-WebRequest -Uri "http://127.0.0.1:$port/methodology" -UseBasicParsing -TimeoutSec 5
+    if ($deepLink.StatusCode -ne 200 -or $deepLink.Content -notmatch 'id="root"') {
+        throw 'SPA deep link /methodology did not return index.html.'
+    }
 }
 finally {
     if ($null -ne $process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
     $env:SignalLedger__DataDirectory = $previousDataDirectory
 }
 
-Write-Host "SignalLedger IIS artifact verified: $publishRoot"
+Write-Host "SignalLedger artifact verified: $publishRoot"

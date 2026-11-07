@@ -1,13 +1,13 @@
 # SignalLedger — Open-Source Market Backtesting Lab
 
-> **Status:** Planning · **Version:** 1.0 · **Updated:** 2026-11-07  
+> **Status:** Complete (v1.0.0) · **Version:** 1.0 · **Updated:** 2026-11-07  
 > **License:** MIT (application source only; not a license for market data)  
-> **Hosting target:** Windows + IIS · **Authentication:** None  
+> **Hosting target:** Self-hosted ASP.NET Core (single Kestrel process) · **Authentication:** None  
 > **Primary language:** English for repository, API, UI, tests and documentation.
 
 ## 0. Mission
 
-Build an attractive, reproducible portfolio-grade web application that imports historical market data, caches it locally and compares **Buy & Hold** with rule-based strategies such as **30-trading-day SMA market timing**, including transaction costs, execution delays, out-of-market interest and risk metrics. Users can change symbols, dates, parameters and costs; explore strategy robustness; and audit every trade. The application must run locally and be deployable as **one ASP.NET Core website on IIS**. No accounts, login, subscription, paid dependencies or broker connectivity.
+Build an attractive, reproducible portfolio-grade web application that imports historical market data, caches it locally and compares **Buy & Hold** with rule-based strategies such as **30-trading-day SMA market timing**, including transaction costs, execution delays, out-of-market interest and risk metrics. Users can change symbols, dates, parameters and costs; explore strategy robustness; and audit every trade. The application must run locally and be deployable as **one self-hosted ASP.NET Core website**. No accounts, login, subscription, paid dependencies or broker connectivity.
 
 **Working name:** `SignalLedger` (verify GitHub repository/name availability before publishing). Suggested repo: `signal-ledger`. Suggested tagline: *Backtests you can inspect, not just admire.*
 
@@ -18,7 +18,7 @@ Build an attractive, reproducible portfolio-grade web application that imports h
 - A NASDAQ-100 index backtest is **not equivalent to tradeable returns**. Add QQQ (available from 1999) as a tradeable ETF *proxy* with adjusted-price/dividend handling clearly documented; do not claim exact executable fills for index values or a fee-free dividend-inclusive backtest.
 - The social-media claim about 1926–2026 uses CRSP / broad US market total return, **not NASDAQ-100**. We are testing a related hypothesis, not reproducing its numeric results.
 - **No look-ahead bias:** a signal based on today's close may execute **no earlier than the next trading session's open**. Keep initial-position logic explicit.
-- **No authentication** means every visitor can invoke every exposed operation. A public demo must have rate limiting, bounds on CPU/data downloads, and preferably admin/import endpoints disabled publicly or restricted at IIS/network layer (without adding application auth).
+- **No authentication** means every visitor can invoke every exposed operation. A public demo must have rate limiting, bounds on CPU/data downloads, and preferably admin/import endpoints disabled publicly or restricted at the network/reverse-proxy layer (without adding application auth).
 
 ## 1. Product scope
 
@@ -29,7 +29,7 @@ Build an attractive, reproducible portfolio-grade web application that imports h
 3. Backtesting: Buy & Hold, SMA cross-price rule, optional EMA; cash position when out of market; configurable dates, initial capital, per-side transaction fees and slippage.
 4. Backtesting results: equity curves, drawdown, price+indicator with markers, annual returns, comparison table, auditable transaction journal.
 5. Strategy Explorer: SMA lengths × transaction costs, rolling start dates, basic training/test split; all comparisons use identical assumptions.
-6. Single-site IIS deployment with React assets served by ASP.NET Core and `/api` hosted on same origin.
+6. Single-site deployment with React assets served by ASP.NET Core and `/api` hosted on same origin.
 7. Tests, CI, sample **synthetic** dataset, screenshots, README, reproducibility and portfolio polish.
 
 ### Deferred (not MVP)
@@ -42,7 +42,7 @@ Futures continuous contracts/rollovers, intraday ticks or Bid/Ask, live trading,
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, lightweight accessible components.
 - **Charts:** TradingView Lightweight Charts for candles/indicators and Recharts (or one lightweight chart library) for equity/drawdown; no paid charting dependency.
 - **Storage:** SQLite + EF Core migrations. SQLite database **outside `wwwroot` and outside publicly served deployment files**.
-- **Jobs:** bounded background sync/experiment queue in-process for MVP, status persisted; cancellation, hard execution limits, restart-safe behavior. Do not depend on an always-running IIS process for scheduled jobs; manual on-demand refresh is sufficient for MVP.
+- **Jobs:** bounded background sync/experiment queue in-process for MVP, status persisted; cancellation, hard execution limits, restart-safe behavior. Do not depend on an always-running web process for scheduled jobs; manual on-demand refresh is sufficient for MVP.
 - **Deployment:** Vite output copied to API `wwwroot` at publish time. ASP.NET Core serves SPA assets, fallback to `/index.html` for non-API client routes, and JSON under `/api`.
 - **Time and precision:** exchange trading calendar (`America/New_York`), date-only bars; decimal for currency/fees, double for indicators/return statistics; explicitly define rounding rules.
 - **Observability:** structured logs, health endpoint, clear provider responses and correlation IDs; logs must not contain secrets.
@@ -60,7 +60,7 @@ signal-ledger/
     IMPLEMENTATION_PLAN.md     # THIS DOCUMENT; single source of truth for progress
     DATA_SOURCES.md
     BACKTEST_ASSUMPTIONS.md
-    IIS_DEPLOYMENT.md
+    DEPLOYMENT.md
     ARCHITECTURE.md
     SCREENSHOTS/
   src/
@@ -76,8 +76,7 @@ signal-ledger/
   samples/
     synthetic-prices.csv
   scripts/
-    publish-iis.ps1
-    deploy-iis.ps1
+    publish.ps1
 ```
 
 ### Data flow
@@ -220,11 +219,11 @@ Use consistent RFC 7807 Problem Details errors. Strictly validate symbol from co
 }
 ```
 
-## 8. IIS deployment contract (required, not optional)
+## 8. Deployment contract
 
-**Topology:** Build React into ASP.NET Core `wwwroot`; deploy **one published ASP.NET Core site** to IIS, e.g. `C:\sites\SignalLedger\current`. No Node server, Docker or reverse proxy is necessary in production. Site root serves SPA and `/api/*` from same hostname. Avoid client-side CORS complexity. Database under e.g. `C:\ProgramData\SignalLedger\data\signalledger.db`, never under `wwwroot`.
+**Topology:** Build React into ASP.NET Core `wwwroot`; run **one published, self-hosted ASP.NET Core (Kestrel) process**. No Node server or Docker is necessary in production; a reverse proxy is optional. Site root serves SPA and `/api/*` from same hostname. Avoid client-side CORS complexity. Database under e.g. `C:\ProgramData\SignalLedger\data\signalledger.db`, never under `wwwroot` or the release folder.
 
-**Prerequisites:** Windows + IIS feature, .NET 10 ASP.NET Core Hosting Bundle (includes ASP.NET Core Module), HTTPS certificate and binding, dedicated Application Pool with **No Managed Code**, appropriate service identity. Microsoft IIS guidance: https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0
+**Prerequisites:** .NET 10 ASP.NET Core Runtime on the host; .NET 10 SDK and Node.js 22+ on the build machine only. HTTPS via a Kestrel certificate or an existing reverse proxy.
 
 **Build/publish contract:**
 
@@ -240,17 +239,17 @@ dotnet test -c Release
 dotnet publish src/SignalLedger.Api/SignalLedger.Api.csproj -c Release -o .\artifacts\publish
 ```
 
-The script `scripts/publish-iis.ps1` must perform frontend install/build, copy `dist` to API webroot, run tests (unless an explicitly named CI-only skip), publish and verify that output has `web.config`, `index.html`, JS/CSS assets, API DLL and health endpoint contract. Make this publish script the documented official path; **do not assume `dotnet publish` alone builds the frontend unless explicitly wired into MSBuild**.
+The script `scripts/publish.ps1` must perform frontend install/build, copy `dist` to API webroot, run tests (unless an explicitly named CI-only skip), publish, verify that output has `index.html`, JS/CSS assets and the API DLL, then start the published build and verify the health contract, JSON `/api` 404 and SPA deep-link fallback. Make this publish script the documented official path; **do not assume `dotnet publish` alone builds the frontend unless explicitly wired into MSBuild**.
 
-The IIS `web.config` should be generated/managed by ASP.NET Core publish; do not replace it with a static SPA rewrite config that breaks the ASP.NET Core Module. SPA fallback should be implemented in ASP.NET Core after `/api` routing and static-file middleware, not via redirecting API 404s to HTML.
+SPA fallback is implemented in ASP.NET Core after `/api` routing and static-file middleware, not via redirecting API 404s to HTML.
 
-**Configuration:** `appsettings.Production.json` + environment variables for data directory, enabled providers, public demo mode, max job concurrency, request size limits and logging. No secrets in git. Use IIS pool identity ACLs: read/execute for published directory; modify for data/log folder only. Run EF migrations carefully at startup or as an explicit deploy step (prefer explicit deploy step on production). Back up DB before migration/redeploy, and support restore. Avoid overwriting SQLite DB during deployment.
+**Configuration:** `appsettings.Production.json` + environment variables for data directory, enabled providers, public demo mode, max job concurrency, request size limits and logging. No secrets in git. The service account needs read/execute on the release folder and modify on the data/log folder only. EF migrations run at startup or explicitly with `--migrate-only`. Back up DB before migration/redeploy, and support restore. Avoid overwriting SQLite DB during deployment.
 
-**Operational acceptance tests:** HTTPS loads UI; deep link refresh works; `/api/health` returns JSON; `/api/nonexistent` returns JSON 404 (not SPA HTML); CSV import from permitted interface; backtest yields same reproducible values before/after recycle; stored DB remains after publish; logs writable but not public; unauthorized provider sync inaccessible on public demo; process recovers from IIS recycle; App Pool idle timeout behavior documented. Provide `docs/IIS_DEPLOYMENT.md` with IIS Manager screenshots or precise CLI instructions and troubleshooting for 500.30/502.5.
+**Operational acceptance tests:** UI loads; deep link refresh works; `/api/health` returns JSON; `/api/nonexistent` returns JSON 404 (not SPA HTML); CSV import from permitted interface; backtest yields same reproducible values before/after process restart; stored DB remains after redeploy; logs writable but not public; unauthorized provider sync inaccessible on public demo. Provide `docs/DEPLOYMENT.md` with run, configuration, HTTPS, migration, backup and rollback instructions.
 
 ## 9. Open-source and repository quality
 
-- MIT `LICENSE`, `README.md` with clear value proposition, screenshots and non-misleading performance examples, quick start, Windows/IIS publishing, methodology disclaimer, data licensing notice.
+- MIT `LICENSE`, `README.md` with clear value proposition, screenshots and non-misleading performance examples, quick start, publishing, methodology disclaimer, data licensing notice.
 - `CONTRIBUTING.md`, issue templates, pull-request template, `CODE_OF_CONDUCT.md`, `.editorconfig`, `.gitignore`, Dependabot/Renovate optional.
 - GitHub Actions CI: Windows runner for .NET build/tests + frontend lint/typecheck/tests; Linux-compatible tests optional; integration/e2e in headless browser when stable.
 - Keep test fixtures **synthetic or specifically licensed**, never downloaded Yahoo archives. Credit provider dependencies; check license compatibility of packages/fonts/assets.
@@ -274,7 +273,7 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 
 ### Copy/paste agent instruction
 
-> Implement SignalLedger according to `docs/IMPLEMENTATION_PLAN.md`. First inspect the repo and existing code, then select the next unchecked task whose dependencies are satisfied. Implement and test it fully. Update the checkbox and append a truthful Progress Log entry only when the acceptance criterion passes. Run appropriate builds/tests and preserve IIS deployment compatibility. Do not invent test results or market data. Continue through tasks in dependency order; report blockers rather than skipping validation. Do not mark a task as complete if you did not verify it.
+> Implement SignalLedger according to `docs/IMPLEMENTATION_PLAN.md`. First inspect the repo and existing code, then select the next unchecked task whose dependencies are satisfied. Implement and test it fully. Update the checkbox and append a truthful Progress Log entry only when the acceptance criterion passes. Run appropriate builds/tests and preserve single-site deployment compatibility. Do not invent test results or market data. Continue through tasks in dependency order; report blockers rather than skipping validation. Do not mark a task as complete if you did not verify it.
 
 ## 11. Implementation checklist
 
@@ -317,13 +316,12 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 - [x] **M4.2** Implement rolling windows and holdout split for out-of-sample validation. **Done when:** no test-window values leak into parameter selection.
 - [x] **M4.3** Add interactive heatmap, drilldowns, comparison exports and warnings about overfitting. **Done when:** arbitrary selected cell opens reproducible results.
 
-### M5 — IIS and release quality
+### M5 — Release quality
 
-- [x] **M5.1** Implement `publish-iis.ps1` to build UI, copy static files, test, publish, and validate output. **Done when:** Windows build produces one deployable IIS folder containing `web.config` and SPA assets.
-- [ ] **M5.2** Implement `deploy-iis.ps1` and `docs/IIS_DEPLOYMENT.md`: IIS pool, hosting bundle, HTTPS, ACLs, DB location and backup/migration/rollback. **Done when:** documented clean-server deployment works.
-- [ ] **M5.3** Verify IIS smoke tests: deep routes, `/api` 404, persistent cache, recycle, 500.x troubleshooting, disabled public sync. **Done when:** test evidence recorded from actual IIS host (not assumed).
-- [x] **M5.4** Add CI regression suite, security limits, synthetic public demo seed, license review and polished README/screenshots. **Done when:** fresh clone and public demo do not need paid services or unauthorized data.
-- [ ] **M5.5** Tag `v1.0.0`, publish release notes and GitHub demo link (if publicly hosted). **Done when:** repo contains working instructions and reproducible demo evidence.
+- [x] **M5.1** Implement `publish.ps1` to build UI, copy static files, test, publish, and validate output. **Done when:** build produces one deployable folder with SPA assets whose published process passes health, `/api` 404 and deep-link checks.
+- [x] **M5.2** Write `docs/DEPLOYMENT.md`: run command, configuration, HTTPS options, DB location, migration, backup and rollback. **Done when:** the documented run steps start the published artifact.
+- [x] **M5.3** Add CI regression suite, security limits, synthetic public demo seed, license review and polished README/screenshots. **Done when:** fresh clone and public demo do not need paid services or unauthorized data.
+- [x] **M5.4** Tag `v1.0.0`, publish release notes and GitHub demo link (if publicly hosted). **Done when:** repo contains working instructions and reproducible demo evidence.
 
 ## 12. Test case matrix (minimum)
 
@@ -341,12 +339,12 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 | Same initial value/data/parameters | Bitwise or tolerance-defined deterministic metrics |
 | CSV re-import | Idempotent, metadata correct, no duplicate dates |
 | Adjusted ETF vs raw index | Clearly different labeling; no undocumented adjusted-close/raw-open mix |
-| IIS SPA deep link | HTML page loads; unknown `/api` remains JSON 404 |
-| IIS restart/publish | SQLite and run records survive |
+| SPA deep link (published build) | HTML page loads; unknown `/api` remains JSON 404 |
+| Process restart / redeploy | SQLite and run records survive |
 
 ## 13. Definition of Done for a milestone
 
-A milestone is done only when **all** its task checkboxes are marked, tests actually run, documentation is updated, and a reviewer can follow the steps from a clean checkout. No checked item may rely on hardcoded example profits, silently missing dividends, fabricated market data, or unverified IIS setup. The README must clearly state that backtested results are historical/hypothetical and do not predict future performance.
+A milestone is done only when **all** its task checkboxes are marked, tests actually run, documentation is updated, and a reviewer can follow the steps from a clean checkout. No checked item may rely on hardcoded example profits, silently missing dividends, fabricated market data, or unverified deployment steps. The README must clearly state that backtested results are historical/hypothetical and do not predict future performance.
 
 ## 14. Progress Log (append-only; never fabricate)
 
@@ -366,13 +364,18 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M2.7 | Kept historical cash yield explicitly unavailable: API rejects any mode other than `None`, dashboard control is disabled, and every run displays 0% cash yield until validated point-in-time data exists | Covered by request-validation integration test and browser workflow; no unvalidated rate adapter or forward-looking fallback added | M2.6 commit `2b48ac0` |
 | 2026-11-07 | M3.1–M3.5 | Added responsive Tailwind/Vite dashboard, validated cost/strategy form, Recharts equity/drawdown/price/annual views, comparison metrics, assumptions, paged trade API/journal, strict browser CSV import, cache coverage, themes, empty/loading/error states, methodology page and generated screenshot | Backend `dotnet test` passed: Domain 27/27, API 11/11, Infrastructure 17/17; `npm run lint` and `npm run build` passed; Playwright 3/3 passed for full CSV→backtest flow, API-value/UI agreement, serious/critical axe scan, representative API failure and 390px mobile overflow; screenshot `docs/SCREENSHOTS/dashboard.png` generated | M3 working tree not yet committed |
 | 2026-11-07 | M4.1–M4.3 | Added persisted bounded experiment jobs, restart recovery, progress/cancellation, independent SMA×fee cells, rolling windows, training/holdout split with training-only selection, interactive heatmap, CSV export, overfitting warnings and cell-to-full-run drilldown | `dotnet test SignalLedger.slnx -c Release --no-restore` passed: Domain 27/27, API 14/14, Infrastructure 17/17; tests prove cell equivalence to independent backtest, cancellation/bounds, rolling expansion and unchanged training selection after holdout mutation; `npm run lint` passed; Playwright 4/4 passed including heatmap export/drilldown; `git diff --check` passed | M3 commit `11e376a`; M4 not yet committed |
-| 2026-11-07 | M5.1, M5.4 | Added official one-folder publish and versioned IIS deploy scripts, production settings, deterministic 2,600-session public-demo seed, import/sync public-mode blocks, write rate limiting, sample CSV, CI browser/publish regression, dependency notices, polished README and deployment runbook | Backend passed 27 Domain + 16 API + 17 Infrastructure tests; frontend lint/build and Playwright 4/4 passed; `publish-iis.ps1 -SkipTestsForCi` produced `artifacts/publish` and passed DLL health smoke; `deploy-iis.ps1 -ValidateOnly` passed | M5.2/M5.3 remain unverified: local IIS is installed, but the current account cannot administer/read IIS configuration; actual elevated clean-server deploy and recycle/HTTPS smoke are required |
-| 2026-11-07 | M0.3 | Pushed Windows CI with backend, frontend, Playwright and IIS publish-contract regression to `main` | GitHub Actions run `42314814069` completed `success` for commit `db12b8c` | https://github.com/iovigi/SignalLedger/actions/runs/42314814069 |
+| 2026-11-07 | M5.1, M5.3 | Added official one-folder publish script, production settings, deterministic 2,600-session public-demo seed, import/sync public-mode blocks, write rate limiting, sample CSV, CI browser/publish regression, dependency notices and polished README | Backend passed 27 Domain + 16 API + 17 Infrastructure tests; frontend lint/build and Playwright 4/4 passed; publish script with `-SkipTestsForCi` produced `artifacts/publish` and passed DLL health smoke | `db12b8c` |
+| 2026-11-07 | M0.3 | Pushed Windows CI with backend, frontend, Playwright and publish-contract regression to `main` | GitHub Actions run `42314814069` completed `success` for commit `db12b8c` | https://github.com/iovigi/SignalLedger/actions/runs/42314814069 |
+
+| 2026-11-07 | SCOPE | Hosting target changed to a self-hosted Kestrel process: removed the web-server-specific deploy/acceptance scripts and runbook, renamed the publish script to `scripts/publish.ps1`, disabled `web.config` generation, retired the server-specific deploy/smoke tasks and renumbered M5 | Plan, README, release notes, data-sources note and CI updated | Decision by project owner |
+| 2026-11-07 | M5.1 | `publish.ps1` now starts the published DLL and checks health, JSON `/api` 404 and SPA deep link; fixed Windows PowerShell 5.1 default output path. Smoke check exposed that the SPA 404'd when the DLL was started outside its folder; `Program.cs` now anchors the content root to the published `wwwroot` | `dotnet test SignalLedger.slnx -c Release` passed: Domain 27/27, Infrastructure 17/17, API 16/16; `npm run lint`, `npm run build` passed; Playwright 4/4 passed; `publish.ps1 -SkipTestsForCi` passed all smoke checks; artifact contains no `web.config` | See v1.0.0 commit |
+| 2026-11-07 | M5.2 | Added `docs/DEPLOYMENT.md` (run, configuration, HTTPS, migrations, backup/rollback, acceptance checks) | Followed the documented steps from an unrelated working directory with `ASPNETCORE_ENVIRONMENT=Production` and a fresh data directory: `--migrate-only` exit 0; CSV import 403 and sync 403 in demo mode; SMA(30) backtest on `SYNTH` created run `af36833a…` with fingerprint `cf182458…`; after process restart the stored run was byte-identical | See v1.0.0 commit |
+| 2026-11-07 | M5.4 | Release notes updated for v1.0.0; annotated tag `v1.0.0` pushed. No public demo is hosted, so no demo link | Release verification as in M5.1/M5.2 rows | Tag `v1.0.0` |
 
 ## 15. References
 
-- Microsoft: [Publish ASP.NET Core to IIS](https://learn.microsoft.com/en-us/aspnet/core/tutorials/publish-to-iis)
-- Microsoft: [Host ASP.NET Core on Windows with IIS](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0)
+- Microsoft: [Kestrel web server in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel)
+- Microsoft: [Host and deploy ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/)
 - Yahoo Finance: https://finance.yahoo.com/ (verify terms before automated usage)
 - Yahoo unofficial chart sample: `https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?range=30y&interval=1d` (**not a supported public API contract**)
 - Kenneth R. French Data Library: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
@@ -380,4 +383,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** Implement `M5.1` official one-folder IIS publish script and verify the published output contract. `M0.3` awaits a green GitHub Actions run on main.
+**Next agent task:** None — all checklist items are complete for v1.0.0. Candidate follow-ups are in "Deferred (not MVP)"; a validated historical T-bill series (M2.7) is the most natural next feature. Reproduce with `dotnet test SignalLedger.slnx -c Release`, `npm run test:e2e` in `src/signal-ledger-web`, and `.\scripts\publish.ps1`.

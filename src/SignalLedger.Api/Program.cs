@@ -11,7 +11,17 @@ using SignalLedger.Infrastructure.Persistence;
 using SignalLedger.Infrastructure.Providers;
 using SignalLedger.Infrastructure.Reporting;
 
-var builder = WebApplication.CreateBuilder(args);
+// A published artifact carries its own wwwroot next to the DLL. Anchor the content root there so
+// `dotnet <path>\SignalLedger.Api.dll` serves the SPA regardless of the working directory.
+// Development builds (no wwwroot/index.html in the output folder) keep the default content root.
+var publishedContentRoot = File.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html"))
+    ? AppContext.BaseDirectory
+    : null;
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = publishedContentRoot,
+});
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

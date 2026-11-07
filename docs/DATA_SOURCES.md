@@ -36,7 +36,7 @@ The adapter is disabled by default and refuses network access unless both settin
 }
 ```
 
-Setting these flags is a deployer attestation, not a grant of permission. Before enabling them, review current terms and obtain any required authorization, or replace the adapter with a licensed source. Public deployments should leave sync disabled or restrict the endpoint at IIS/network level. CI and tests use local fixtures and never require live Yahoo access.
+Setting these flags is a deployer attestation, not a grant of permission. Before enabling them, review current terms and obtain any required authorization, or replace the adapter with a licensed source. Public deployments should leave sync disabled or restrict the endpoint at the network/reverse-proxy level. CI and tests use local fixtures and never require live Yahoo access.
 
 Do not commit, publish, cache in releases, or redistribute prices downloaded from Yahoo unless you independently hold the necessary rights. The MIT license covers application source only.
 
