@@ -1,6 +1,6 @@
 # Deployment
 
-SignalLedger ships as one self-hosted ASP.NET Core (Kestrel) process. The compiled React assets and the JSON API share the same origin, so no Node server, CORS setup or separate static host is needed in production. The SQLite database lives outside the release folder and `wwwroot`.
+SignalLedger ships as one self-hosted ASP.NET Core process. This page covers running it directly on Kestrel; for Windows Server/IIS (in-process, AlwaysRunning, preload) see [IIS_DEPLOYMENT.md](IIS_DEPLOYMENT.md). The same published folder serves both. The compiled React assets and the JSON API share the same origin, so no Node server, CORS setup or separate static host is needed in production. The SQLite database lives outside the release folder and `wwwroot`.
 
 ## Build the artifact
 
@@ -13,7 +13,7 @@ dotnet tool restore
 
 The script runs `npm ci`, frontend lint/build, all backend tests, `dotnet publish`, copies the Vite bundle into the published `wwwroot`, then starts the published DLL and checks that:
 
-- `/api/health` returns JSON with `status: healthy`;
+- `/health` and `/api/health` return JSON with `status: healthy`.
 - `/api/does-not-exist` returns a JSON 404 (not the SPA HTML);
 - the deep link `/methodology` returns `index.html`.
 
@@ -36,7 +36,9 @@ Production defaults (`appsettings.Production.json`):
 | `SignalLedger:DataDirectory` | `C:\ProgramData\SignalLedger\data` | SQLite location; keep it outside the release folder |
 | `SignalLedger:PublicDemoMode` | `true` | Rejects CSV import and provider sync with 403 |
 | `SignalLedger:SeedSyntheticDemo` | `true` | Seeds the deterministic 2,600-session `SYNTH` series |
-| `SignalLedger:Yahoo:Enabled` / `AuthorizedUseConfirmed` | `false` | Provider sync stays off until both are set after a terms review |
+| `SignalLedger:ReadOnlyMode` | `false` | Public read-only mode: no imports, provider access or administrative operations |
+| `SignalLedger:Yahoo:Enabled` / `AuthorizedUseConfirmed` | `false` | Provider stays off until both are set after a terms review (see [MARKET_DATA.md](MARKET_DATA.md)) |
+| `SignalLedger:Administration:AllowHttpSettingsChanges` / `AllowHttpDownloadOperations` | `false` | Allow provider settings and downloads from the browser; there is no authentication, so enable only on trusted networks |
 
 Override any setting with environment variables (`SignalLedger__PublicDemoMode=false`, etc.). Never put the database, logs or credentials below `wwwroot`.
 
@@ -56,7 +58,7 @@ Before upgrading, stop the process and copy `signalledger.db` to a backup locati
 
 After starting a release:
 
-- `/api/health` returns JSON with `status: healthy`.
+- `/health` and `/api/health` return JSON with `status: healthy`.
 - Refreshing `/methodology` or another client route returns the SPA.
 - `/api/does-not-exist` returns HTTP 404 with `application/problem+json`.
 - In public-demo mode, CSV import and provider sync return 403 and a backtest on `SYNTH` succeeds.

@@ -1,4 +1,4 @@
-import type { BacktestResponse, ExperimentResponse, ImportResult, Instrument } from './types'
+import type { BacktestResponse, EnqueueResponse, ExperimentResponse, ImportResult, Instrument, MarketDataJob, MarketDataSettings, MarketDataStatus } from './types'
 
 async function read<T>(response: Response): Promise<T> {
   if (response.ok) return response.json() as Promise<T>
@@ -24,3 +24,17 @@ export async function createExperiment(payload: unknown, signal?: AbortSignal) {
 }
 export async function getExperiment(id: string, signal?: AbortSignal) { return read<ExperimentResponse>(await fetch(`/api/experiments/${id}`, { signal })) }
 export async function cancelExperiment(id: string) { const response = await fetch(`/api/experiments/${id}/cancel`, { method: 'POST' }); if (!response.ok) throw new Error(`Cancel failed with HTTP ${response.status}`) }
+
+// Market data: every provider request is made by the SignalLedger server, never by the browser.
+const json = { 'Content-Type': 'application/json' }
+export async function getMarketDataStatus(signal?: AbortSignal) { return read<MarketDataStatus>(await fetch('/api/market-data/status', { signal })) }
+export async function updateMarketDataSettings(update: Partial<Pick<MarketDataSettings, 'historicalYears' | 'syncIntervalMinutes' | 'recentSessionReconciliationDays'>> & { yahooEnabled?: boolean; autoSyncEnabled?: boolean }) {
+  return read<MarketDataSettings>(await fetch('/api/settings/market-data', { method: 'PUT', headers: json, body: JSON.stringify(update) }))
+}
+export async function startMarketDataJob(kind: 'download' | 'sync' | 'repair', symbols?: string[]) {
+  return read<EnqueueResponse>(await fetch(`/api/market-data/${kind}`, { method: 'POST', headers: json, body: JSON.stringify(symbols?.length ? { symbols } : {}) }))
+}
+export async function refreshMarketData(symbol: string, from: string, to: string) {
+  return read<EnqueueResponse>(await fetch('/api/market-data/refresh', { method: 'POST', headers: json, body: JSON.stringify({ symbol, from, to }) }))
+}
+export async function cancelMarketDataJob(id: string) { return read<MarketDataJob>(await fetch(`/api/market-data/jobs/${id}/cancel`, { method: 'POST' })) }

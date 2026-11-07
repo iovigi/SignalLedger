@@ -29,7 +29,14 @@ public sealed class BacktestService(SignalLedgerDbContext dbContext, TimeProvide
         var symbol = request.Symbol.Trim().ToUpperInvariant(); var source = request.Source.Trim();
         var storedBars = await dbContext.DailyBars.AsNoTracking().Where(x => x.Symbol == symbol && x.Source == source && x.SessionDate <= request.EndDate).OrderBy(x => x.SessionDate).ToListAsync(cancellationToken);
         var series = new PriceSeries(storedBars.Select(x => new PriceBar(x.SessionDate, x.Open, x.High, x.Low, x.Close, x.Volume)));
-        if (series.Count(x => x.Date >= request.StartDate && x.Date <= request.EndDate) < 2) throw new BacktestValidationException("At least two bars are required in the evaluation window.");
+        if (series.Count(x => x.Date >= request.StartDate && x.Date <= request.EndDate) < 2)
+        {
+            // Backtests read only the local cache; missing data is reported, never fetched or substituted.
+            var available = await dbContext.DailyBars.AsNoTracking().Where(x => x.Symbol == symbol && x.Source == source).GroupBy(x => 1).Select(g => new { First = g.Min(x => x.SessionDate), Last = g.Max(x => x.SessionDate) }).SingleOrDefaultAsync(cancellationToken);
+            throw new BacktestValidationException(available is null
+                ? $"At least two bars are required in the evaluation window. No cached data exists for {symbol}/{source}; import a CSV or download history in the Data Manager."
+                : $"At least two bars are required in the evaluation window. Cached {symbol}/{source} data covers {available.First:yyyy-MM-dd} to {available.Last:yyyy-MM-dd}.");
+        }
         var strategy = CreateStrategy(request.Strategy);
         var settings = new ExecutionSettings(request.Execution.CommissionPercentPerSide, request.Execution.SlippageBpsPerSide, request.Execution.LiquidateAtEnd);
         var strategyRun = BacktestEngine.Run(series, request.StartDate, request.EndDate, request.InitialCapital, strategy, settings);

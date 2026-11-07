@@ -17,6 +17,25 @@ namespace SignalLedger.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("SignalLedger.Domain.MarketData.ApplicationSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("ApplicationSettings");
+                });
+
             modelBuilder.Entity("SignalLedger.Domain.MarketData.DailyBar", b =>
                 {
                     b.Property<long>("Id")
@@ -117,6 +136,168 @@ namespace SignalLedger.Infrastructure.Persistence.Migrations
                     b.HasKey("Symbol");
 
                     b.ToTable("Instruments");
+                });
+
+            modelBuilder.Entity("SignalLedger.Domain.MarketData.MarketDataJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("CancellationRequested")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CompletedSteps")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LeaseExpiresUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("NotBeforeUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ProviderRequests")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RecordsAdded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RecordsUpdated")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("RequestedFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("RequestedTo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("ResumeFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("StartedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalSteps")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.HasIndex("Symbol", "Source", "Status");
+
+                    b.ToTable("MarketDataJobs");
+                });
+
+            modelBuilder.Entity("SignalLedger.Domain.MarketData.MarketDataSyncState", b =>
+                {
+                    b.Property<string>("Symbol")
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("EarliestCachedDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("EarliestRequestedDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastAttemptUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastSuccessfulSyncUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LatestCachedDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LatestRequestedDate")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Symbol", "Source");
+
+                    b.ToTable("MarketDataSyncStates");
+                });
+
+            modelBuilder.Entity("SignalLedger.Domain.MarketData.UnavailableSession", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("CheckedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Symbol", "Source", "SessionDate")
+                        .IsUnique();
+
+                    b.ToTable("UnavailableSessions");
                 });
 
             modelBuilder.Entity("SignalLedger.Domain.Runs.BacktestRun", b =>

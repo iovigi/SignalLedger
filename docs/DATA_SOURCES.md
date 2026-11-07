@@ -19,11 +19,11 @@ The default header mapping is `Date,Open,High,Low,Close,Adj Close,Volume`. `Date
 
 Imports validate every row. Invalid dates, non-positive prices, inconsistent high/low values, negative volume, duplicate dates, and malformed columns are rejected with row/field errors. Valid rows are transactionally upserted and every run is audited. Only import data you own or are licensed to use. Export does not create redistribution rights.
 
-## Optional Yahoo Chart adapter
+## Optional Yahoo Chart provider
 
 Yahoo's chart endpoint is unofficial and undocumented. Automated collection may be restricted by current Yahoo terms. SignalLedger does not claim that this endpoint is a supported public API.
 
-The adapter is disabled by default and refuses network access unless both settings are true:
+The provider is disabled by default. The server refuses any Yahoo request unless the deployer has set the attestation **and** the provider is enabled (in configuration, or from the UI when the operator allows settings changes):
 
 ```json
 {
@@ -36,7 +36,9 @@ The adapter is disabled by default and refuses network access unless both settin
 }
 ```
 
-Setting these flags is a deployer attestation, not a grant of permission. Before enabling them, review current terms and obtain any required authorization, or replace the adapter with a licensed source. Public deployments should leave sync disabled or restrict the endpoint at the network/reverse-proxy level. CI and tests use local fixtures and never require live Yahoo access.
+`AuthorizedUseConfirmed` is a server-level deployer attestation, not a grant of permission, and cannot be changed from the UI. Before setting it, review current terms and obtain any required authorization, or replace the adapter with a licensed source. Public deployments should run with `ReadOnlyMode=true` (or keep `Administration:AllowHttpDownloadOperations=false`). CI and tests use local stubs and never require live Yahoo access.
+
+How downloads, caching, incremental synchronization, jobs and feature flags work is described in [MARKET_DATA.md](MARKET_DATA.md).
 
 Do not commit, publish, cache in releases, or redistribute prices downloaded from Yahoo unless you independently hold the necessary rights. The MIT license covers application source only.
 

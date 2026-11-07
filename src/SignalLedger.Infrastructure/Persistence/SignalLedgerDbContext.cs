@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SignalLedger.Domain.MarketData;
 using SignalLedger.Domain.Runs;
 
@@ -14,6 +15,10 @@ public sealed class SignalLedgerDbContext(DbContextOptions<SignalLedgerDbContext
     public DbSet<StoredEquityPoint> EquityPoints => Set<StoredEquityPoint>();
     public DbSet<ExperimentJob> ExperimentJobs => Set<ExperimentJob>();
     public DbSet<ExperimentCell> ExperimentCells => Set<ExperimentCell>();
+    public DbSet<MarketDataSyncState> MarketDataSyncStates => Set<MarketDataSyncState>();
+    public DbSet<UnavailableSession> UnavailableSessions => Set<UnavailableSession>();
+    public DbSet<MarketDataJob> MarketDataJobs => Set<MarketDataJob>();
+    public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +55,30 @@ public sealed class SignalLedgerDbContext(DbContextOptions<SignalLedgerDbContext
         {
             e.HasKey(x => x.Id); e.HasIndex(x => new { x.ExperimentJobId, x.Period, x.CommissionPercent, x.WindowLabel }).IsUnique();
             e.Property(x => x.CommissionPercent).HasPrecision(8, 4); e.Property(x => x.WindowLabel).HasMaxLength(80);
+        });
+        modelBuilder.Entity<MarketDataSyncState>(e =>
+        {
+            e.HasKey(x => new { x.Symbol, x.Source }); e.Property(x => x.Symbol).HasMaxLength(16); e.Property(x => x.Source).HasMaxLength(40); e.Property(x => x.LastError).HasMaxLength(1000);
+        });
+        modelBuilder.Entity<UnavailableSession>(e =>
+        {
+            e.HasKey(x => x.Id); e.HasIndex(x => new { x.Symbol, x.Source, x.SessionDate }).IsUnique();
+            e.Property(x => x.Symbol).HasMaxLength(16); e.Property(x => x.Source).HasMaxLength(40);
+        });
+        modelBuilder.Entity<MarketDataJob>(e =>
+        {
+            e.HasKey(x => x.Id); e.HasIndex(x => new { x.Status, x.CreatedAtUtc }); e.HasIndex(x => new { x.Symbol, x.Source, x.Status });
+            e.Property(x => x.Symbol).HasMaxLength(16); e.Property(x => x.Source).HasMaxLength(40); e.Property(x => x.LeaseOwner).HasMaxLength(120);
+            e.Property(x => x.Type).HasConversion<string>().HasMaxLength(16); e.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Error).HasMaxLength(2000); e.Property(x => x.Message).HasMaxLength(500);
+            // SQLite cannot order/compare DateTimeOffset text server-side; the queue queries these columns, so store them as sortable integers.
+            e.Property(x => x.CreatedAtUtc).HasConversion(new DateTimeOffsetToBinaryConverter());
+            e.Property(x => x.NotBeforeUtc).HasConversion(new DateTimeOffsetToBinaryConverter());
+            e.Property(x => x.LeaseExpiresUtc).HasConversion(new DateTimeOffsetToBinaryConverter());
+        });
+        modelBuilder.Entity<ApplicationSetting>(e =>
+        {
+            e.HasKey(x => x.Key); e.Property(x => x.Key).HasMaxLength(120); e.Property(x => x.Value).HasMaxLength(400);
         });
     }
 }

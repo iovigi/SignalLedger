@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using SignalLedger.Api.Backtests;
 using SignalLedger.Api.Experiments;
+using SignalLedger.Api.MarketData;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
 using SignalLedger.Infrastructure.Providers;
@@ -37,6 +38,11 @@ builder.Services.AddRateLimiter(options =>
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
+    // Per-client budget for provider and settings operations, partitioned by the TCP peer address only.
+    // X-Forwarded-For is not trusted: no forwarded-headers middleware is configured.
+    options.AddPolicy(MarketDataEndpoints.ProviderRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<SignalLedgerDbContext>((services, options) =>
@@ -51,10 +57,20 @@ builder.Services.AddDbContext<SignalLedgerDbContext>((services, options) =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CsvImportService>();
 builder.Services.AddScoped<MarketDataCoverageService>();
-var yahooOptions = builder.Configuration.GetSection("SignalLedger:Yahoo").Get<YahooProviderOptions>() ?? new();
-builder.Services.AddSingleton(yahooOptions);
-builder.Services.AddHttpClient<IMarketDataProvider, YahooChartAdapter>();
+builder.Services.AddSingleton<MarketDataSettingsService>();
+builder.Services.AddSingleton<IMarketDataAccessPolicy>(services => services.GetRequiredService<MarketDataSettingsService>());
+// Yahoo is contacted only from the server; per-attempt timeouts and bounded retries live in the adapter.
+builder.Services.AddHttpClient<IMarketDataProvider, YahooChartAdapter>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(3);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("SignalLedger/1.0");
+});
+builder.Services.AddSingleton<MarketDataSyncLocks>();
 builder.Services.AddScoped<MarketDataSyncService>();
+builder.Services.AddSingleton<MarketDataJobSignal>();
+builder.Services.AddScoped<MarketDataJobService>();
+builder.Services.AddHostedService<MarketDataJobWorker>();
+builder.Services.AddHostedService<MarketDataAutoSyncService>();
 builder.Services.AddScoped<BacktestService>();
 builder.Services.AddSingleton<ExperimentQueue>();
 builder.Services.AddScoped<ExperimentService>();
@@ -92,6 +108,10 @@ app.MapGet("/api/health", (IHostEnvironment environment) => Results.Ok(new
     timestampUtc = DateTimeOffset.UtcNow
 })).WithName("Health");
 
+// Lightweight liveness probe for IIS Application Initialization and load balancers.
+// It never touches the provider, never triggers synchronization and exposes no configuration.
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).WithName("Liveness");
+
 app.MapGet("/api/instruments", async (MarketDataCoverageService coverage, CancellationToken cancellationToken) =>
     Results.Ok(await coverage.GetAllAsync(cancellationToken))).WithName("Instruments");
 
@@ -101,7 +121,7 @@ app.MapGet("/api/instruments/{symbol}/coverage", async (string symbol, MarketDat
 
 app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, IConfiguration configuration, SignalLedgerDbContext db, CsvImportService importer, CancellationToken cancellationToken) =>
 {
-    if (configuration.GetValue<bool>("SignalLedger:PublicDemoMode"))
+    if (configuration.GetValue<bool>("SignalLedger:PublicDemoMode") || configuration.GetValue<bool>("SignalLedger:ReadOnlyMode"))
         return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Import disabled", detail: "CSV import is disabled in public demo mode. Run locally to import your own data.");
     if (file.Length == 0 || file.Length > 5 * 1024 * 1024)
         return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid CSV file", detail: "CSV file must be between 1 byte and 5 MB.");
@@ -122,14 +142,7 @@ app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, IConfigura
     }
 }).DisableAntiforgery().RequireRateLimiting("writes").WithName("ImportCsv");
 
-app.MapPost("/api/market-data/sync", async (string symbol, DateOnly from, DateOnly to, IConfiguration configuration, MarketDataSyncService sync, CancellationToken cancellationToken) =>
-{
-    if (configuration.GetValue<bool>("SignalLedger:PublicDemoMode"))
-        return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider sync disabled", detail: "Provider sync is disabled in public demo mode.");
-    try { return Results.Accepted(value: await sync.SyncAsync(symbol, from, to, cancellationToken)); }
-    catch (ProviderDisabledException exception) { return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Provider disabled", detail: exception.Message); }
-    catch (ArgumentException exception) { return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid sync request", detail: exception.Message); }
-}).RequireRateLimiting("writes").WithName("SyncMarketData");
+app.MapMarketDataEndpoints();
 
 app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService service, CancellationToken cancellationToken) =>
 {

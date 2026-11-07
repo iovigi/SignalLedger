@@ -1,8 +1,8 @@
 # SignalLedger — Open-Source Market Backtesting Lab
 
-> **Status:** Complete (v1.0.0) · **Version:** 1.0 · **Updated:** 2026-11-07  
+> **Status:** v1.0.0 released; M6 (Yahoo cache, incremental sync, IIS) implemented and locally verified · **Version:** 1.1 · **Updated:** 2026-11-07  
 > **License:** MIT (application source only; not a license for market data)  
-> **Hosting target:** Self-hosted ASP.NET Core (single Kestrel process) · **Authentication:** None  
+> **Hosting target:** Self-hosted ASP.NET Core — Kestrel process or IIS in-process (one artifact) · **Authentication:** None  
 > **Primary language:** English for repository, API, UI, tests and documentation.
 
 ## 0. Mission
@@ -221,7 +221,7 @@ Use consistent RFC 7807 Problem Details errors. Strictly validate symbol from co
 
 ## 8. Deployment contract
 
-**Topology:** Build React into ASP.NET Core `wwwroot`; run **one published, self-hosted ASP.NET Core (Kestrel) process**. No Node server or Docker is necessary in production; a reverse proxy is optional. Site root serves SPA and `/api/*` from same hostname. Avoid client-side CORS complexity. Database under e.g. `C:\ProgramData\SignalLedger\data\signalledger.db`, never under `wwwroot` or the release folder.
+**Topology:** Build React into ASP.NET Core `wwwroot`; run **one published, self-hosted ASP.NET Core process** — directly on Kestrel or in-process under IIS (`web.config` is part of the artifact; IIS setup in `docs/IIS_DEPLOYMENT.md`). No Node server or Docker is necessary in production; a reverse proxy is optional. Site root serves SPA and `/api/*` from same hostname. Avoid client-side CORS complexity. Database under e.g. `C:\ProgramData\SignalLedger\data\signalledger.db`, never under `wwwroot` or the release folder.
 
 **Prerequisites:** .NET 10 ASP.NET Core Runtime on the host; .NET 10 SDK and Node.js 22+ on the build machine only. HTTPS via a Kestrel certificate or an existing reverse proxy.
 
@@ -323,6 +323,134 @@ This document is the **implementation backlog and progress tracker**. Agents mus
 - [x] **M5.3** Add CI regression suite, security limits, synthetic public demo seed, license review and polished README/screenshots. **Done when:** fresh clone and public demo do not need paid services or unauthorized data.
 - [x] **M5.4** Tag `v1.0.0`, publish release notes and GitHub demo link (if publicly hosted). **Done when:** repo contains working instructions and reproducible demo evidence.
 
+### M6 — Yahoo Finance, Cache & IIS Implementation
+
+Scope: server-side Yahoo history with persistent SQLite cache, incremental synchronization, feature flags, persistent background jobs, Market Data UI and IIS hosting artifacts. Design and operations: `docs/MARKET_DATA.md`, `docs/IIS_DEPLOYMENT.md`. Configuration keeps the existing `SignalLedger:` root (`SignalLedger:Yahoo`, `SignalLedger:Administration`, `SignalLedger:Jobs`, `SignalLedger:ReadOnlyMode`).
+
+#### Repository Inspection
+
+- [x] Inspect existing architecture.
+- [x] Inspect current Yahoo implementation (`YahooChartAdapter`, synchronous `MarketDataSyncService`, dual authorization gate).
+- [x] Inspect database entities and migrations (`DailyBar` unique by symbol/date/source reused as the price cache).
+- [x] Inspect existing background processing (`ExperimentWorker` pattern).
+- [x] Inspect IIS publishing configuration (IIS removed in `8900ab6`; `web.config` generation disabled).
+
+#### Feature Flags
+
+- [x] Implement Yahoo Finance feature flag.
+- [x] Implement effective configuration resolver (`MarketDataSettingsService`: server restrictions > SQLite overrides > configuration).
+- [x] Implement SQLite persistent settings (`ApplicationSettings`).
+- [x] Implement runtime configuration updates (no restart; disabling Yahoo cancels its jobs).
+- [x] Implement backend permission enforcement (`Administration:*` off by default, `ReadOnlyMode`, `AuthorizedUseConfirmed`).
+- [x] Implement frontend feature flag controls.
+
+#### Yahoo Finance Provider
+
+- [x] Implement typed Yahoo HTTP client.
+- [x] Implement historical OHLCV download (adjusted close, volume; exchange-time session dates; float32 decoding).
+- [x] Implement response validation (symbol match, array lengths, OHLC consistency, malformed JSON).
+- [x] Implement retry and rate-limit handling (bounded exponential backoff, HTTP 429 `Retry-After`).
+- [x] Implement cancellation support.
+- [x] Support all required instruments (`^NDX`, `^IXIC`, `^GSPC`, `QQQ`).
+
+#### Market Data Cache
+
+- [x] Implement persistent SQLite candle storage.
+- [x] Implement synchronization metadata (`MarketDataSyncStates`, `UnavailableSessions`).
+- [x] Implement idempotent upserts (per-range transactions; no overwrite outside reconciliation/refresh).
+- [x] Implement historical coverage queries (`/api/market-data/status`, `/api/market-data/{symbol}`).
+- [x] Implement persistent database configuration (data directory outside release, WAL).
+
+#### Incremental Synchronization
+
+- [x] Implement initial historical download.
+- [x] Implement incremental missing-date synchronization.
+- [x] Implement US exchange calendar handling (New York time, DST, settle time; fixed Saturday New Year's Day bug).
+- [x] Implement cache freshness detection.
+- [x] Implement zero-request behavior for current caches.
+- [x] Implement historical gap detection.
+- [x] Implement historical gap repair.
+- [x] Implement optional recent-session reconciliation (`RecentSessionReconciliationDays`, default 0).
+- [x] Implement explicit historical refresh.
+
+#### Background Processing
+
+- [x] Implement persistent download jobs.
+- [x] Implement background worker.
+- [x] Implement job progress reporting.
+- [x] Implement job cancellation.
+- [x] Implement duplicate job protection.
+- [x] Implement interrupted job recovery.
+- [x] Implement automatic synchronization.
+
+#### Frontend
+
+- [x] Implement Market Data settings page (Data Manager → Market data provider).
+- [x] Display effective feature flag state.
+- [x] Display cached historical coverage.
+- [x] Display active download progress.
+- [x] Implement Download Historical Data.
+- [x] Implement Sync Missing Data.
+- [x] Implement Repair Historical Gaps.
+- [x] Implement empty database onboarding.
+- [x] Preserve offline backtesting.
+
+#### REST API
+
+- [x] Implement settings endpoints.
+- [x] Implement market data endpoints.
+- [x] Implement download endpoints.
+- [x] Implement synchronization endpoints.
+- [x] Implement job monitoring endpoints.
+- [x] Implement server-side validation and rate limiting.
+
+#### IIS Preparation
+
+- [x] Generate production-ready `web.config`.
+- [x] Implement local publish configuration.
+- [x] Include React assets in ASP.NET Core publishing.
+- [x] Create IIS deployment PowerShell script (`scripts/deploy-iis.ps1`; not executed).
+- [x] Configure AlwaysRunning in the script.
+- [x] Configure disabled idle timeout in the script.
+- [x] Configure preloadEnabled in the script.
+- [x] Implement `/health`.
+- [x] Document IIS Application Initialization.
+- [x] Document SQLite filesystem permissions.
+- [x] Document deployment and recovery procedures.
+
+#### Local Verification
+
+- [x] Run backend unit tests.
+- [x] Run backend integration tests.
+- [x] Run frontend tests (Playwright browser suite).
+- [x] Build React production assets.
+- [x] Build ASP.NET Core Release configuration.
+- [x] Publish ASP.NET Core to a local directory.
+- [x] Verify generated `web.config` locally.
+- [x] Statically validate PowerShell deployment script.
+- [x] Verify local backtesting using cached historical data.
+
+#### Documentation
+
+- [x] Update README.
+- [x] Create/update AGENTS.md.
+- [x] Update IMPLEMENTATION_PLAN.md.
+- [x] Create/update MARKET_DATA.md.
+- [x] Create/update IIS_DEPLOYMENT.md.
+- [x] Record completed work and remaining issues.
+
+#### Explicitly Out of Scope
+
+Production deployment; staging deployment; remote server access; live IIS configuration; live IIS verification; production database modifications; production smoke testing; production health checks. These are not blocking items.
+
+#### Known limitations / remaining work
+
+- `scripts/deploy-iis.ps1` is statically validated only; it has never been executed against an IIS server (out of scope by design).
+- SQLite is single-instance: job leases prevent duplicate execution if two processes share the file, but web farms are not supported.
+- Behind a reverse proxy all clients share one provider rate-limit budget (forwarded headers are intentionally not trusted).
+- `AdjustedClose` is cached but not used by the engine; QQQ/index results remain raw price-return simulations.
+- There are no frontend unit tests; the React UI is covered by the Playwright suite.
+
 ## 12. Test case matrix (minimum)
 
 | Case | Expected behavior |
@@ -371,6 +499,11 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 | 2026-11-07 | M5.1 | `publish.ps1` now starts the published DLL and checks health, JSON `/api` 404 and SPA deep link; fixed Windows PowerShell 5.1 default output path. Smoke check exposed that the SPA 404'd when the DLL was started outside its folder; `Program.cs` now anchors the content root to the published `wwwroot` | `dotnet test SignalLedger.slnx -c Release` passed: Domain 27/27, Infrastructure 17/17, API 16/16; `npm run lint`, `npm run build` passed; Playwright 4/4 passed; `publish.ps1 -SkipTestsForCi` passed all smoke checks; artifact contains no `web.config` | See v1.0.0 commit |
 | 2026-11-07 | M5.2 | Added `docs/DEPLOYMENT.md` (run, configuration, HTTPS, migrations, backup/rollback, acceptance checks) | Followed the documented steps from an unrelated working directory with `ASPNETCORE_ENVIRONMENT=Production` and a fresh data directory: `--migrate-only` exit 0; CSV import 403 and sync 403 in demo mode; SMA(30) backtest on `SYNTH` created run `af36833a…` with fingerprint `cf182458…`; after process restart the stored run was byte-identical | See v1.0.0 commit |
 | 2026-11-07 | M5.4 | Release notes updated for v1.0.0; annotated tag `v1.0.0` pushed. No public demo is hosted, so no demo link | Release verification as in M5.1/M5.2 rows; GitHub Actions run `42316613810` completed `success` for commit `8900ab6` | Tag `v1.0.0` → `8900ab6`; https://github.com/iovigi/SignalLedger/actions/runs/42316613810 |
+| 2026-11-07 | SCOPE | Project owner re-introduced IIS as a supported host (alongside Kestrel) together with the server-side Yahoo cache work (M6). Live IIS configuration/verification and any deployment remain out of scope | Plan, README and deployment docs updated | Decision by project owner |
+| 2026-11-07 | M6 (provider, flags, cache, sync) | `MarketDataSettingsService` (server restrictions > SQLite `ApplicationSettings` > config), async provider gate, rewritten `YahooChartAdapter` (per-attempt timeout, bounded backoff, 429 `Retry-After`, symbol/array/OHLC validation, exchange-time dates, float32 decoding), pure `MarketDataSyncPlanner` (initial/backfill/gap/tail/reconciliation/refresh, minimal contiguous ranges, 10-year chunks), `MarketDataSyncService` (per-range transactions, no overwrite outside reconcile/refresh, unavailable-session tracking, sync state), migration `AddMarketDataSync`, WAL. Calendar: exchange time zone/settle time, and fixed a verified bug that treated the Friday before a Saturday New Year's Day (e.g. 2021-12-31) as a holiday | `dotnet test SignalLedger.slnx -c Release`: Domain 27/27, Infrastructure 67/67 (planner, calendar/DST, sync, adapter incl. 429/cancellation/invalid responses) | Working tree |
+| 2026-11-07 | M6 (jobs, API, UI) | Persistent `MarketDataJobs` + `MarketDataJobWorker` (DB lease, heartbeat, progress, cancellation, transient retry with `NotBeforeUtc`, restart recovery re-planning from SQLite), `MarketDataAutoSyncService` (queues only instruments missing sessions), REST endpoints under `/api/settings/market-data` and `/api/market-data/*`, per-IP provider rate limit, `/health`, clearer insufficient-data backtest error; React `MarketDataPanel` (flags, coverage, onboarding, jobs/progress, sync/repair/refresh/cancel, lock reasons) | API integration 28/28 (safe defaults, server override, read-only, settings persist across restart, background download then zero-request sync, duplicates + cancel, disable cancels jobs, failure keeps cache, crash recovery requests only missing sessions, auto-sync, offline backtest, health); `npm run lint`, `npm run build` passed; Playwright 6/6 incl. provider panel + axe | Working tree |
+| 2026-11-07 | M6 (IIS) | `src/SignalLedger.Api/web.config` (ANCM V2, in-process, `dotnet .\SignalLedger.Api.dll`, stdout off), `scripts/deploy-iis.ps1` (idempotent, `-WhatIf`; pool No Managed Code/AlwaysRunning/idle 0/autoStart/no overlapped recycle, preloadEnabled, Application Initialization `/health`, env vars, ACLs, app_offline copy) — **not executed**; `publish.ps1` validates `web.config`, absence of DB files, parses the IIS script, smoke-tests `/health`; native-command handling fixed for Windows PowerShell 5.1; `docs/IIS_DEPLOYMENT.md`, `docs/MARKET_DATA.md`, `AGENTS.md`, README/DATA_SOURCES/DEPLOYMENT updates | `.\scripts\publish.ps1` (Windows PowerShell 5.1) passed end-to-end: all backend tests, web.config validation, static script parse, published-DLL smoke (`/health`, `/api/health`, JSON 404, deep link). The smoke test caught and fixed an invalid escape in `appsettings.Production.json` | Working tree |
+| 2026-11-07 | M6 (live local check) | Ran the published artifact locally (Kestrel, scratch data directory, Yahoo enabled via environment variables) at the owner's request; no IIS, no production | Download of all 4 symbols: 4 requests each, `^GSPC`/`^IXIC`/`^NDX` 7,548 bars from 1996-11-06, QQQ 6,960 from 1999-03-10 (inception), **0 missing sessions** over 30 years; spot checks match published closes (^GSPC 2008-10-09 909.92, 2020-03-23 2237.40; ^IXIC 2000-03-10 5048.62); holidays/closures absent, 2021-12-31 present. After restart on the same DB: counts unchanged; sync of all 4 = 0 provider requests; refresh ^GSPC Oct 2008 = 1 request, 23 updated, outside range untouched; Yahoo disabled via settings API → sync 403; ^NDX SMA(200) 2000–2026 backtest ran on cache | Data kept only in the session scratchpad; not committed |
 
 ## 15. References
 
@@ -383,4 +516,4 @@ A milestone is done only when **all** its task checkboxes are marked, tests actu
 
 ---
 
-**Next agent task:** None — all checklist items are complete for v1.0.0. Candidate follow-ups are in "Deferred (not MVP)"; a validated historical T-bill series (M2.7) is the most natural next feature. Reproduce with `dotnet test SignalLedger.slnx -c Release`, `npm run test:e2e` in `src/signal-ledger-web`, and `.\scripts\publish.ps1`.
+**Next agent task:** None open — M6 is implemented and locally verified. Remaining items are the M6 known limitations (IIS script never run on a real server, by design) and the "Deferred (not MVP)" list; a validated historical T-bill series (M2.7) or an adjusted/total-return mode for QQQ are the most natural next features. Reproduce with `dotnet test SignalLedger.slnx -c Release`, `npm run test:e2e` in `src/signal-ledger-web`, and `.scriptspublish.ps1`. Read `AGENTS.md` first.

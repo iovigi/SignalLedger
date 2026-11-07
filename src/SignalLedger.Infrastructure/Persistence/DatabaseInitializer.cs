@@ -8,6 +8,9 @@ public static class DatabaseInitializer
     public static async Task InitializeAsync(SignalLedgerDbContext dbContext, bool seedSyntheticDemo = false, CancellationToken cancellationToken = default)
     {
         await dbContext.Database.MigrateAsync(cancellationToken);
+        // WAL lets the API read while the background worker writes; the setting is persistent in the database file.
+        if (dbContext.Database.GetDbConnection().DataSource is { Length: > 0 } dataSource && !dataSource.Contains(":memory:", StringComparison.OrdinalIgnoreCase))
+            await dbContext.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken);
         if (!await dbContext.Instruments.AnyAsync(cancellationToken))
         {
             dbContext.Instruments.AddRange(

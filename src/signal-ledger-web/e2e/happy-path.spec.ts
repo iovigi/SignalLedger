@@ -63,6 +63,32 @@ test.describe.serial('browser workflow', () => {
     await expect(page.getByRole('heading', { name: 'Equity curves' })).toBeVisible()
   })
 
+  test('shows provider state and keeps download controls locked by default', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Data Manager' }).click()
+    await expect(page.getByRole('heading', { name: 'Market data provider' })).toBeVisible()
+    await expect(page.getByText('Yahoo disabled')).toBeVisible()
+    await expect(page.getByText('No historical market data available.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Download Historical Data' })).toBeDisabled()
+    await expect(page.getByLabel('Enable Yahoo provider')).toBeDisabled()
+    await expect(page.getByText(/AllowHttpSettingsChanges/)).toBeVisible()
+    const accessibility = await new AxeBuilder({ page }).analyze()
+    expect(accessibility.violations.filter(x => x.impact === 'critical' || x.impact === 'serious')).toEqual([])
+  })
+
+  test('renders background job progress from the server', async ({ page }) => {
+    const settings = { readOnlyMode: false, yahooAuthorizedByServer: true, yahooEnabledRequested: true, yahooEnabled: true, yahooDisabledReason: null, autoSyncRequested: true, autoSyncEnabled: true, syncIntervalMinutes: 60, historicalYears: 30, recentSessionReconciliationDays: 0, requestTimeoutSeconds: 30, maximumYears: 40, settingsChangesAllowed: true, settingsLockReason: null, downloadOperationsAllowed: true, downloadLockReason: null, valueSources: {} }
+    const job = { id: 'job-1', type: 'Download', trigger: 'Manual', symbol: '^NDX', source: 'YahooChart', requestedFrom: null, requestedTo: null, status: 'Running', completedSteps: 1, totalSteps: 4, progress: 0.25, recordsAdded: 2520, recordsUpdated: 0, providerRequests: 1, retryCount: 0, cancellationRequested: false, message: 'Fetched 1996-11-07..2006-11-06 (Initial)', error: null, createdAtUtc: '2026-11-07T10:00:00Z', startedAtUtc: '2026-11-07T10:00:01Z', completedAtUtc: null, notBeforeUtc: null }
+    const row = { symbol: '^NDX', displayName: 'NASDAQ-100 Price Index', source: 'YahooChart', providerSupported: true, earliestCachedDate: '1996-11-07', latestCachedDate: '2006-11-06', cachedBars: 2520, missingSessions: 5030, unavailableSessions: 0, pendingRequests: 3, upToDate: false, lastSuccessfulSyncUtc: null, lastAttemptUtc: '2026-11-07T10:00:05Z', lastError: null }
+    await page.route('**/api/market-data/status', route => route.fulfill({ json: { settings, latestCompletedSession: '2026-11-06', hasAnyProviderData: true, instruments: [row], activeJobs: [job] } }))
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Data Manager' }).click()
+    await expect(page.getByRole('heading', { name: 'Background jobs' })).toBeVisible()
+    await expect(page.getByText('2,520 added · 1 requests')).toBeVisible()
+    await expect(page.getByRole('progressbar', { name: '^NDX Download progress' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sync Missing Data' })).toBeEnabled()
+  })
+
   test('remains usable at a mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')

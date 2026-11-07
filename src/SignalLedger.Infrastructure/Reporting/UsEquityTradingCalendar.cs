@@ -1,13 +1,54 @@
 namespace SignalLedger.Infrastructure.Reporting;
 
+/// <summary>NYSE/Nasdaq regular-session calendar (full-day closures only; early closes still produce a daily bar).</summary>
 public static class UsEquityTradingCalendar
 {
+    public const string ExchangeTimeZoneId = "America/New_York";
+
+    /// <summary>A session's daily bar is treated as final only after this exchange-local time on the session date.</summary>
+    public static readonly TimeOnly SessionSettledAt = new(18, 0);
+
+    private static readonly Lazy<TimeZoneInfo> ExchangeTimeZone = new(() =>
+        TimeZoneInfo.TryFindSystemTimeZoneById(ExchangeTimeZoneId, out var zone) ? zone : TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"));
+
     private static readonly HashSet<DateOnly> ExceptionalClosures = new()
     {
         new(2001, 9, 11), new(2001, 9, 12), new(2001, 9, 13), new(2001, 9, 14),
         new(2004, 6, 11), new(2007, 1, 2), new(2012, 10, 29), new(2012, 10, 30),
         new(2018, 12, 5), new(2025, 1, 9)
     };
+
+    public static TimeZoneInfo TimeZone => ExchangeTimeZone.Value;
+
+    /// <summary>Exchange-local calendar date of an instant (daylight-saving aware).</summary>
+    public static DateOnly ExchangeDate(DateTimeOffset instant) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, TimeZone).DateTime);
+
+    /// <summary>The most recent session whose daily bar is complete at <paramref name="nowUtc"/>. Today's session counts only once it has settled.</summary>
+    public static DateOnly LatestCompletedSession(DateTimeOffset nowUtc)
+    {
+        var local = TimeZoneInfo.ConvertTime(nowUtc, TimeZone).DateTime;
+        var date = DateOnly.FromDateTime(local);
+        return IsTradingSession(date) && TimeOnly.FromDateTime(local) >= SessionSettledAt ? date : PreviousSession(date);
+    }
+
+    public static DateOnly PreviousSession(DateOnly date)
+    {
+        do date = date.AddDays(-1); while (!IsTradingSession(date));
+        return date;
+    }
+
+    public static DateOnly NextSession(DateOnly date)
+    {
+        do date = date.AddDays(1); while (!IsTradingSession(date));
+        return date;
+    }
+
+    public static IEnumerable<DateOnly> Sessions(DateOnly first, DateOnly last)
+    {
+        for (var date = first; date <= last; date = date.AddDays(1))
+            if (IsTradingSession(date))
+                yield return date;
+    }
 
     public static bool IsTradingSession(DateOnly date)
     {
@@ -19,7 +60,7 @@ public static class UsEquityTradingCalendar
     {
         var holidays = new HashSet<DateOnly>
         {
-            Observed(new(year, 1, 1)),
+            NewYearsDay(year),
             NthWeekday(year, 2, DayOfWeek.Monday, 3),
             GoodFriday(year),
             LastWeekday(year, 5, DayOfWeek.Monday),
@@ -30,9 +71,15 @@ public static class UsEquityTradingCalendar
         };
         if (year >= 1998) holidays.Add(NthWeekday(year, 1, DayOfWeek.Monday, 3));
         if (year >= 2022) holidays.Add(Observed(new(year, 6, 19)));
-        // A Saturday New Year's Day is observed on the preceding Friday.
-        holidays.Add(Observed(new(year + 1, 1, 1)));
         return holidays;
+    }
+
+    // NYSE does not close on the preceding Friday when New Year's Day falls on a Saturday
+    // (2010-12-31 and 2021-12-31 were full sessions); a Sunday holiday moves to Monday.
+    private static DateOnly NewYearsDay(int year)
+    {
+        var date = new DateOnly(year, 1, 1);
+        return date.DayOfWeek == DayOfWeek.Sunday ? date.AddDays(1) : date;
     }
 
     private static DateOnly Observed(DateOnly date) => date.DayOfWeek switch

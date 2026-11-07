@@ -4,8 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Self-hosted Kestrel artifact: do not generate an IIS web.config on publish. -->
+    <!-- The checked-in web.config (IIS, in-process) is published as-is; the same artifact also runs under Kestrel. -->
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
   </PropertyGroup>
 
   <ItemGroup>
