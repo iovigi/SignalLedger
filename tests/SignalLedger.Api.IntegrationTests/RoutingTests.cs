@@ -44,5 +44,17 @@ public sealed class RoutingTests : IClassFixture<SignalLedgerApiFactory>
         Assert.Contains("SignalLedger frontend assets", body, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/index.html")]
+    [InlineData("/strategy-explorer")]
+    public async Task SpaShell_IsAlwaysRevalidated_SoADeployIsPickedUpImmediately(string path)
+    {
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoCache, $"{path} must be served with Cache-Control: no-cache.");
+    }
+
     private sealed record HealthResponse(string Status);
 }

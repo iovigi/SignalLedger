@@ -109,7 +109,19 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.UseRateLimiter();
-app.UseStaticFiles();
+// The SPA shell must always be revalidated, otherwise browsers/CDNs keep an old index.html that points at the previous
+// release's bundle after a deploy. Vite assets carry a content hash in their name and can be cached forever.
+var spaStaticFiles = new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase))
+            context.Context.Response.Headers.CacheControl = "no-cache";
+        else if (context.Context.Request.Path.StartsWithSegments("/assets"))
+            context.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    }
+};
+app.UseStaticFiles(spaStaticFiles);
 
 app.MapGet("/api/health", (IHostEnvironment environment) => Results.Ok(new
 {
@@ -195,7 +207,7 @@ app.Map("/api/{**path}", () => Results.Problem(
     title: "API endpoint not found",
     type: "https://httpstatuses.com/404"));
 
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html", spaStaticFiles);
 
 app.Run();
 
