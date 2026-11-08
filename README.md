@@ -54,7 +54,7 @@ SignalLedger does not bundle or redistribute downloaded market data. You can imp
 3. To manage downloads from the browser, also set `SignalLedger__Administration__AllowHttpDownloadOperations=true` (and optionally `AllowHttpSettingsChanges=true`). These are off by default because SignalLedger has no authentication — enable them only on a trusted network; use `SignalLedger__ReadOnlyMode=true` for public sites.
 4. Open **Data Manager → Market data provider → Download Historical Data**. Jobs run on the server; you can close the browser.
 
-After the first download, *Sync missing data* (or automatic sync every `SyncIntervalMinutes`) requests only completed sessions that are not cached yet, using a US exchange calendar (weekends, holidays, closures, New York time). *Repair gaps* fills holes inside the cached history; *Force refresh* re-downloads one explicit date range. Details: [market data](docs/MARKET_DATA.md).
+After the first download, *Sync missing data* (or automatic sync every `SyncIntervalMinutes`) requests only completed sessions that are not cached yet, using a US exchange calendar (weekends, holidays, closures, New York time). *Repair gaps* fills holes inside the cached history; *Force refresh* re-downloads one explicit date range. Details: [market data](docs/MARKET_DATA.md). A feature-flagged, API-key-protected diagnostics endpoint (`/api/monitoring`, off by default) reports why the provider is or is not active, cache coverage, jobs, worker heartbeats and recent logs: [monitoring](docs/MONITORING.md).
 
 `^NDX`, `^IXIC`, and `^GSPC` are non-tradable price-index proxies; their OHLC values are not Bid/Ask. QQQ raw-price tests exclude distributions and are not total-return results.
 

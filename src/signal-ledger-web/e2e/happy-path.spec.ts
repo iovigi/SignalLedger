@@ -89,6 +89,18 @@ test.describe.serial('browser workflow', () => {
     await expect(page.getByRole('button', { name: 'Sync Missing Data' })).toBeEnabled()
   })
 
+  test('offers and submits the provider source when an instrument is cached only from Yahoo', async ({ page }) => {
+    const yahooOnly = { symbol: 'QQQ', displayName: 'Invesco QQQ Trust', assetClass: 'Etf', currency: 'USD', priceSeriesMeaning: 'Unadjusted', tradable: true, warnings: [], sources: [{ source: 'YahooChart', firstDate: '2016-11-07', lastDate: '2026-11-06', barCount: 2515, missingSessions: [], lastUpdatedUtc: '2026-11-07T10:00:00Z' }] }
+    await page.route('**/api/instruments', route => route.fulfill({ json: [yahooOnly] }))
+    let submitted: { symbol?: string; source?: string } = {}
+    await page.route('**/api/backtests', route => { submitted = route.request().postDataJSON(); return route.fulfill({ status: 400, contentType: 'application/problem+json', body: JSON.stringify({ title: 'Invalid backtest request', detail: 'Stubbed.' }) }) })
+    await page.goto('/')
+    await expect(page.getByLabel('Source')).toHaveValue('YahooChart')
+    await page.getByRole('button', { name: 'Run comparison' }).click()
+    await expect(page.getByRole('alert')).toContainText('Stubbed.')
+    expect(submitted).toMatchObject({ symbol: 'QQQ', source: 'YahooChart' })
+  })
+
   test('remains usable at a mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')

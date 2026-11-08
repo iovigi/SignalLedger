@@ -142,3 +142,5 @@ Cached prices, settings and job records live only in this database; the release 
 | Jobs never run | `SignalLedger:Jobs:DisableWorker`, Yahoo disabled/not authorized, read-only mode. See `/api/market-data/status`. |
 | App starts only on first request | Application Initialization feature missing, `preloadEnabled` false, or pool not `AlwaysRunning`. |
 | Provider 429 | Yahoo rate limit: jobs reschedule automatically after `Retry-After`. Reduce manual syncs. |
+| Dashboard offers no `YahooChart` source | The Source list only shows sources with cached bars. Typical causes: `PublicDemoMode`/`ReadOnlyMode` true (the production default forces Yahoo off), `AuthorizedUseConfirmed` false, or no initial download yet (automatic sync only tops up existing history; the first download needs `AllowHttpDownloadOperations=true`). |
+| Anything else | Switch on the diagnostics endpoint (`SignalLedger:Monitoring:Enabled=true` in the server's `appsettings.Production.json`, no restart needed) and read `GET /api/monitoring` → `findings`, `workers`, `logs`. See [MONITORING.md](MONITORING.md). |

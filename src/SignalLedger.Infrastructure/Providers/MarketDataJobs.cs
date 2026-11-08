@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SignalLedger.Domain.MarketData;
 using SignalLedger.Domain.Runs;
+using SignalLedger.Infrastructure.Diagnostics;
 using SignalLedger.Infrastructure.Persistence;
 
 namespace SignalLedger.Infrastructure.Providers;
@@ -96,8 +97,9 @@ public sealed class MarketDataJobService(SignalLedgerDbContext dbContext, Market
 /// jobs left Running by a terminated process are returned to Pending and re-planned from SQLite, so only still-missing
 /// ranges are requested.
 /// </summary>
-public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, MarketDataJobSignal signal, MarketDataSettingsService settings, IConfiguration configuration, TimeProvider timeProvider, ILogger<MarketDataJobWorker> logger) : BackgroundService
+public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, MarketDataJobSignal signal, MarketDataSettingsService settings, IConfiguration configuration, TimeProvider timeProvider, ILogger<MarketDataJobWorker> logger, BackgroundWorkerMonitor? monitor = null) : BackgroundService
 {
+    private const string Name = BackgroundWorkerMonitor.MarketDataJobWorker;
     private readonly string workerId = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
     private MarketDataJobOptions Options => configuration.GetSection("SignalLedger:Jobs").Get<MarketDataJobOptions>() ?? new();
 
@@ -110,6 +112,7 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         settings.Changed -= OnSettingsChanged;
+        monitor?.Stopped(Name);
         return base.StopAsync(cancellationToken);
     }
 
@@ -130,9 +133,16 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (configuration.GetValue<bool>("SignalLedger:Jobs:DisableWorker")) { logger.LogWarning("Market-data job worker is disabled by configuration"); return; }
+        if (configuration.GetValue<bool>("SignalLedger:Jobs:DisableWorker"))
+        {
+            logger.LogWarning("Market-data job worker is disabled by configuration");
+            monitor?.Disabled(Name, "Disabled by configuration (SignalLedger:Jobs:DisableWorker=true)");
+            return;
+        }
+        monitor?.Started(Name);
+        monitor?.Detail(Name, "workerId", workerId);
         try { await RecoverAsync(stoppingToken); }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested) { logger.LogError(exception, "Market-data job recovery failed"); }
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested) { logger.LogError(exception, "Market-data job recovery failed"); monitor?.Error(Name, exception); }
         var running = new List<Task>();
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -141,10 +151,17 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
             try
             {
                 while (running.Count < Math.Clamp(options.MaxConcurrency, 1, 4) && await TryClaimAsync(options, stoppingToken) is { } claimed)
+                {
+                    logger.LogInformation("Claimed market-data job {JobId}", claimed);
+                    monitor?.Activity(Name, $"Claimed job {claimed}");
                     running.Add(RunAsync(claimed, options, stoppingToken));
+                }
             }
-            catch (Exception exception) when (!stoppingToken.IsCancellationRequested) { logger.LogError(exception, "Market-data job polling failed"); }
-            try { await signal.WaitAsync(TimeSpan.FromSeconds(Math.Clamp(options.PollIntervalSeconds, 1, 300)), stoppingToken); }
+            catch (Exception exception) when (!stoppingToken.IsCancellationRequested) { logger.LogError(exception, "Market-data job polling failed"); monitor?.Error(Name, exception); }
+            var pollSeconds = Math.Clamp(options.PollIntervalSeconds, 1, 300);
+            monitor?.Heartbeat(Name, busy: running.Count > 0, nextRunUtc: timeProvider.GetUtcNow().AddSeconds(pollSeconds));
+            monitor?.Detail(Name, "runningJobs", running.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            try { await signal.WaitAsync(TimeSpan.FromSeconds(pollSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
         signal.CancelAll();
@@ -225,9 +242,11 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
                 if (p.Segment is { } segment) { job.Message = $"Fetched {segment.From:yyyy-MM-dd}..{segment.To:yyyy-MM-dd} ({segment.Reason})"; if (job.Type == MarketDataJobType.Refresh) job.ResumeFrom = segment.To.AddDays(1); }
                 db.SaveChanges();
             });
+            logger.LogInformation("Running market-data job {JobId}: {Type} {Symbol}/{Source} (trigger {Trigger}, retry {RetryCount})", id, job.Type, job.Symbol, job.Source, job.Trigger, job.RetryCount);
             var result = await sync.SyncAsync(job.Symbol, request, progress, job.Type == MarketDataJobType.Refresh ? job.ResumeFrom : null, jobCancellation.Token);
             job.Status = RunStatus.Completed; job.CompletedAtUtc = timeProvider.GetUtcNow();
             job.Message = result.UpToDate ? "Already up to date; no provider request was needed" : $"Completed: {job.RecordsAdded} added, {job.RecordsUpdated} updated";
+            logger.LogInformation("Market-data job {JobId} {Symbol} completed: {Added} added, {Updated} updated, {Requests} provider requests", id, job.Symbol, job.RecordsAdded, job.RecordsUpdated, job.ProviderRequests);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested && !job.CancellationRequested)
         {
@@ -243,6 +262,7 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
         {
             // The provider was switched off before or during the job: stop safely; cached data is untouched.
             job.Status = RunStatus.Cancelled; job.Error = exception.Message; job.CompletedAtUtc = timeProvider.GetUtcNow(); job.Message = "Cancelled because the provider is disabled";
+            logger.LogWarning("Market-data job {JobId} {Symbol} cancelled: {Reason}", id, job.Symbol, exception.Message);
         }
         catch (Exception exception) when (exception is MarketDataProviderException { IsTransient: true } && job.RetryCount < Math.Clamp(options.MaxRetries, 0, 10))
         {
@@ -255,11 +275,13 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
         catch (Exception exception)
         {
             logger.LogError(exception, "Market-data job {JobId} failed", id);
+            monitor?.Error(Name, exception);
             job.Status = RunStatus.Failed; job.Error = exception.Message.Length > 2000 ? exception.Message[..2000] : exception.Message; job.CompletedAtUtc = timeProvider.GetUtcNow(); job.Message = "Failed; cached data was left intact";
         }
         finally
         {
             signal.Unregister(id);
+            monitor?.Activity(Name, $"Job {id} {job.Type} {job.Symbol} finished as {job.Status}: {job.Message}");
             await jobCancellation.CancelAsync();
             try { await heartbeatTask; } catch (OperationCanceledException) { }
             job.LeaseOwner = null; job.LeaseExpiresUtc = null;
@@ -293,11 +315,13 @@ public sealed class MarketDataJobWorker(IServiceScopeFactory scopeFactory, Marke
 /// Checking SQLite every interval never implies a provider request; instruments that are current are skipped.
 /// Instruments with no cached history are left for an explicit "Download historical data" action.
 /// </summary>
-public sealed class MarketDataAutoSyncService(IServiceScopeFactory scopeFactory, MarketDataSettingsService settings, IConfiguration configuration, TimeProvider timeProvider, ILogger<MarketDataAutoSyncService> logger) : BackgroundService
+public sealed class MarketDataAutoSyncService(IServiceScopeFactory scopeFactory, MarketDataSettingsService settings, IConfiguration configuration, TimeProvider timeProvider, ILogger<MarketDataAutoSyncService> logger, BackgroundWorkerMonitor? monitor = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (configuration.GetValue<bool>("SignalLedger:Jobs:DisableWorker")) return;
+        const string name = BackgroundWorkerMonitor.MarketDataAutoSync;
+        if (configuration.GetValue<bool>("SignalLedger:Jobs:DisableWorker")) { monitor?.Disabled(name, "Disabled by configuration (SignalLedger:Jobs:DisableWorker=true)"); return; }
+        monitor?.Started(name);
         while (!stoppingToken.IsCancellationRequested)
         {
             var interval = TimeSpan.FromMinutes(60);
@@ -305,12 +329,24 @@ public sealed class MarketDataAutoSyncService(IServiceScopeFactory scopeFactory,
             {
                 var effective = await settings.RefreshAsync(stoppingToken);
                 interval = TimeSpan.FromMinutes(effective.SyncIntervalMinutes);
-                if (effective.AutoSyncEnabled) await RunOnceAsync(effective, stoppingToken);
+                if (effective.AutoSyncEnabled)
+                {
+                    var queued = await RunOnceAsync(effective, stoppingToken);
+                    monitor?.Activity(name, queued.Count == 0 ? "Checked cache; nothing queued" : $"Queued sync for {string.Join(", ", queued.Select(x => x.Symbol))}");
+                }
+                else
+                {
+                    var reason = !effective.YahooEnabled ? $"Skipped: Yahoo disabled ({effective.YahooDisabledReason})" : "Skipped: automatic sync is turned off";
+                    logger.LogDebug("Automatic market-data check: {Reason}", reason);
+                    monitor?.Activity(name, reason);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception exception) { logger.LogError(exception, "Automatic market-data check failed"); }
+            catch (Exception exception) { logger.LogError(exception, "Automatic market-data check failed"); monitor?.Error(name, exception); }
+            monitor?.Heartbeat(name, busy: false, nextRunUtc: timeProvider.GetUtcNow() + interval);
             try { await Task.Delay(interval, timeProvider, stoppingToken); } catch (OperationCanceledException) { break; }
         }
+        monitor?.Stopped(name);
     }
 
     public async Task<IReadOnlyList<MarketDataJob>> RunOnceAsync(EffectiveMarketDataSettings effective, CancellationToken cancellationToken)
@@ -325,7 +361,7 @@ public sealed class MarketDataAutoSyncService(IServiceScopeFactory scopeFactory,
         {
             var hasHistory = await db.MarketDataSyncStates.AnyAsync(x => x.Symbol == symbol && x.Source == sync.Source && x.LatestRequestedDate != null, cancellationToken)
                 || await db.DailyBars.AnyAsync(x => x.Symbol == symbol && x.Source == sync.Source, cancellationToken);
-            if (!hasHistory) continue;
+            if (!hasHistory) { logger.LogDebug("Automatic sync skips {Symbol}: no cached history (initial download must be started explicitly)", symbol); continue; }
             var plan = await sync.PlanAsync(symbol, new(SyncMode.Incremental, HistoricalYears: effective.HistoricalYears, ReconciliationSessions: effective.RecentSessionReconciliationDays), cancellationToken);
             if (plan.UpToDate) { logger.LogDebug("{Symbol} is current through {Latest}", symbol, plan.LatestCompletedSession); continue; }
             var result = await jobs.EnqueueAsync(MarketDataJobType.Sync, symbol, sync.Source, null, null, MarketDataJobTrigger.Automatic, cancellationToken);

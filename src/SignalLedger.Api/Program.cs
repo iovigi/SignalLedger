@@ -7,6 +7,8 @@ using System.Text.Json.Serialization;
 using SignalLedger.Api.Backtests;
 using SignalLedger.Api.Experiments;
 using SignalLedger.Api.MarketData;
+using SignalLedger.Api.Monitoring;
+using SignalLedger.Infrastructure.Diagnostics;
 using SignalLedger.Infrastructure.Imports;
 using SignalLedger.Infrastructure.Persistence;
 using SignalLedger.Infrastructure.Providers;
@@ -43,7 +45,16 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(MarketDataEndpoints.ProviderRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy(MonitoringEndpoints.RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
+// Recent log entries are always captured in a bounded in-memory buffer (levels: Logging:Monitoring), so they are already
+// there when the diagnostics endpoint is switched on. The endpoint itself is off unless SignalLedger:Monitoring:Enabled.
+var logStore = new InMemoryLogStore(MonitoringEndpoints.ReadOptions(builder.Configuration).LogCapacity);
+builder.Services.AddSingleton(logStore);
+builder.Logging.AddProvider(new InMemoryLoggerProvider(logStore));
+builder.Services.AddSingleton<BackgroundWorkerMonitor>();
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<SignalLedgerDbContext>((services, options) =>
 {
@@ -143,6 +154,7 @@ app.MapPost("/api/imports/csv", async (IFormFile file, string symbol, IConfigura
 }).DisableAntiforgery().RequireRateLimiting("writes").WithName("ImportCsv");
 
 app.MapMarketDataEndpoints();
+app.MapMonitoringEndpoints();
 
 app.MapPost("/api/backtests", async (BacktestRequest request, BacktestService service, CancellationToken cancellationToken) =>
 {

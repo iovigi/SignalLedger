@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SignalLedger.Api.Backtests;
 using SignalLedger.Domain.Backtesting;
 using SignalLedger.Domain.Runs;
+using SignalLedger.Infrastructure.Diagnostics;
 using SignalLedger.Infrastructure.Persistence;
 
 namespace SignalLedger.Api.Experiments;
@@ -85,12 +86,28 @@ public sealed class ExperimentService(SignalLedgerDbContext dbContext, Experimen
 
 public sealed record ExperimentWindow(DateOnly Start, DateOnly End, string? Label, bool IsHoldout);
 
-public sealed class ExperimentWorker(IServiceScopeFactory scopeFactory, ExperimentQueue queue, TimeProvider timeProvider, ILogger<ExperimentWorker> logger) : BackgroundService
+public sealed class ExperimentWorker(IServiceScopeFactory scopeFactory, ExperimentQueue queue, TimeProvider timeProvider, ILogger<ExperimentWorker> logger, BackgroundWorkerMonitor? monitor = null) : BackgroundService
 {
+    private const string Name = BackgroundWorkerMonitor.ExperimentWorker;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await RecoverAsync(stoppingToken);
-        await foreach (var id in queue.ReadAllAsync(stoppingToken)) await RunAsync(id, stoppingToken);
+        monitor?.Started(Name);
+        try
+        {
+            await RecoverAsync(stoppingToken);
+            monitor?.Heartbeat(Name, busy: false);
+            await foreach (var id in queue.ReadAllAsync(stoppingToken))
+            {
+                monitor?.Activity(Name, $"Running experiment {id}");
+                monitor?.Heartbeat(Name, busy: true);
+                await RunAsync(id, stoppingToken);
+                monitor?.Heartbeat(Name, busy: false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch (Exception exception) { logger.LogCritical(exception, "Experiment worker stopped unexpectedly"); monitor?.Error(Name, exception, fatal: true); throw; }
+        monitor?.Stopped(Name);
     }
 
     private async Task RecoverAsync(CancellationToken cancellationToken)
@@ -132,6 +149,7 @@ public sealed class ExperimentWorker(IServiceScopeFactory scopeFactory, Experime
         catch (Exception exception)
         {
             logger.LogError(exception, "Experiment {ExperimentId} failed", id);
+            monitor?.Error(Name, exception);
             await using var scope = scopeFactory.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<SignalLedgerDbContext>(); var job = await db.ExperimentJobs.SingleOrDefaultAsync(x => x.Id == id, CancellationToken.None);
             if (job is not null) { job.Status = RunStatus.Failed; job.Error = exception.Message; job.CompletedAtUtc = timeProvider.GetUtcNow(); await db.SaveChangesAsync(); }
         }

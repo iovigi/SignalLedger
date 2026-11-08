@@ -10,6 +10,9 @@ const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD
 const percent = (value: number | null) => value == null ? '—' : `${(value * 100).toFixed(2)}%`
 const compact = (value: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value)
 const defaultEndDate = new Date().toISOString().slice(0, 10)
+// The chosen source only applies while the instrument actually has cached bars for it; otherwise fall back to the first
+// cached source, so the submitted source always matches what the <select> shows (e.g. an instrument cached only from Yahoo).
+function resolveSource(instrument: Instrument | undefined, chosen: string) { const sources = instrument?.sources ?? []; return sources.some(x => x.source === chosen) ? chosen : sources[0]?.source ?? 'UserCsv' }
 function buildDrawdown(series: SeriesPoint[]) { let peak = 0; return series.map(point => { peak = Math.max(peak, point.strategyEquity); return { date: point.date, drawdown: peak ? point.strategyEquity / peak - 1 : 0 } }) }
 
 function DashboardApp() {
@@ -41,7 +44,7 @@ function DashboardApp() {
     <header className="app-header">
       <button className="brand-button" onClick={() => setPage('dashboard')}><span className="brand-mark">SL</span><span><b>SignalLedger</b><small>Market backtesting lab</small></span></button>
       <nav aria-label="Primary navigation">
-        {([['dashboard', 'Dashboard'], ['data', 'Data Manager'], ['explorer', 'Strategy Explorer'], ['runs', 'Runs & Journal'], ['methodology', 'Methodology']] as [Page, string][]).map(([key, label]) => <button key={key} className={page === key ? 'nav-active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}
+        {([['dashboard', 'Dashboard'], ['data', 'Data Manager'], ['explorer', 'Strategy Explorer'], ['runs', 'Runs & Journal'], ['methodology', 'Methodology']] as [Page, string][]).map(([key, label]) => <button key={key} className={page === key ? 'nav-active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => { setPage(key); if (key === 'dashboard' || key === 'explorer') void refreshCatalog() }}>{label}</button>)}
       </nav>
       <button className="icon-button" onClick={() => setDark(value => !value)} aria-label={`Use ${dark ? 'light' : 'dark'} theme`}>{dark ? '☀' : '☾'}</button>
     </header>
@@ -59,11 +62,12 @@ function DashboardApp() {
 
 function Dashboard({ instruments, catalogLoading, result, running, error, onRun, onOpenData }: { instruments: Instrument[]; catalogLoading: boolean; result: BacktestResponse | null; running: boolean; error: string; onRun: (payload: unknown) => Promise<void>; onOpenData: () => void }) {
   const usable = instruments.filter(x => x.sources.length > 0)
-  const [symbol, setSymbol] = useState('QQQ'); const [source, setSource] = useState('UserCsv')
+  const [symbol, setSymbol] = useState('QQQ'); const [chosenSource, setSource] = useState('UserCsv')
   const [from, setFrom] = useState('2020-01-01'); const [to, setTo] = useState(defaultEndDate)
   const [capital, setCapital] = useState(1000); const [strategy, setStrategy] = useState('SMA'); const [period, setPeriod] = useState(30)
   const [fee, setFee] = useState(0); const [slippage, setSlippage] = useState(0)
   const selected = instruments.find(x => x.symbol === symbol)
+  const source = resolveSource(selected, chosenSource)
   const validation = from > to ? 'Start date must not be after end date.' : capital < 1 ? 'Initial capital must be at least 1.' : period < 1 || period > 500 ? 'Period must be between 1 and 500.' : ''
   const drawdown = useMemo(() => buildDrawdown(result?.series ?? []), [result])
   const annual = result?.strategy.annualReturns.map(item => ({ year: item.year, strategy: item.return, benchmark: result.benchmark.annualReturns.find(x => x.year === item.year)?.return ?? 0 })) ?? []
@@ -113,13 +117,14 @@ function Results({ result, drawdown, annual }: { result: BacktestResponse; drawd
 }
 
 function StrategyExplorer({ instruments, onOpenRun }: { instruments: Instrument[]; onOpenRun: (payload: unknown) => Promise<void> }) {
-  const [symbol, setSymbol] = useState('QQQ'); const [source, setSource] = useState('UserCsv')
+  const [symbol, setSymbol] = useState('QQQ'); const [chosenSource, setSource] = useState('UserCsv')
   const [from, setFrom] = useState('2020-01-01'); const [to, setTo] = useState(defaultEndDate); const [capital, setCapital] = useState(1000)
   const [periods, setPeriods] = useState('5,10,20,30,50,100,150,200'); const [fees, setFees] = useState('0,0.05,0.1,0.2,0.5')
   const [split, setSplit] = useState(false); const [trainingEnd, setTrainingEnd] = useState('2023-12-31'); const [holdoutStart, setHoldoutStart] = useState('2024-01-01')
   const [rolling, setRolling] = useState(false); const [rollingStarts, setRollingStarts] = useState('2020-01-01,2022-01-01'); const [rollingYears, setRollingYears] = useState(3)
   const [job, setJob] = useState<ExperimentResponse | null>(null); const [error, setError] = useState(''); const [view, setView] = useState('Full window'); const [opening, setOpening] = useState(false)
   const selected = instruments.find(x => x.symbol === symbol)
+  const source = resolveSource(selected, chosenSource)
   const pollingJobId = job?.id; const pollingJobStatus = job?.status
   useEffect(() => {
     if (!pollingJobId || !pollingJobStatus || !['Pending', 'Running'].includes(pollingJobStatus)) return
